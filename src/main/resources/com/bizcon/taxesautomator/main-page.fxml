@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+
+<StackPane xmlns="http://javafx.com/javafx/17.0.12"
+           xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="com.bizcon.taxesautomator.controllers.MainController">
+
+<!-- Основное содержимое -->
+<TabPane fx:id="mainTabPane"
+         prefHeight="400.0"
+         prefWidth="600.0"
+         tabClosingPolicy="UNAVAILABLE"
+         StackPane.alignment="CENTER">
+
+    <Tab text="Cedvel">
+        <content>
+            <AnchorPane>
+                <children>
+                    <TableView fx:id="mainTable"
+                               AnchorPane.topAnchor="0.0"
+                               AnchorPane.leftAnchor="0.0"
+                               AnchorPane.rightAnchor="0.0"
+                               AnchorPane.bottomAnchor="0.0">
+                        <columnResizePolicy>
+                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
+                        </columnResizePolicy>
+                    </TableView>
+                </children>
+            </AnchorPane>
+        </content>
+    </Tab>
+
+    <Tab text="Ayarlar">
+        <content>
+            <AnchorPane prefHeight="180.0" prefWidth="200.0">
+                <children>
+                    <AnchorPane prefHeight="364.0" prefWidth="593.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+                        <children>
+                            <VBox alignment="CENTER" prefHeight="334.0" prefWidth="571.0" spacing="20" styleClass="panel,panel-primary" AnchorPane.bottomAnchor="20.0" AnchorPane.leftAnchor="20.0" AnchorPane.rightAnchor="20.0" AnchorPane.topAnchor="20.0">
+
+                                <children>
+                                    <HBox alignment="CENTER" prefHeight="42.0" prefWidth="548.0" spacing="10">
+                                        <children>
+                                            <TextArea fx:id="folderTextArea" disable="true" prefHeight="42.0" prefWidth="525.0" styleClass="form-control" text="Yuklenmis faylar ucun papkani secin .." HBox.hgrow="ALWAYS" />
+                                            <Button fx:id="folderBtn" mnemonicParsing="false" prefHeight="42.0" styleClass="btn,btn-primary" text="SECMEK" />
+                                        </children>
+                                    </HBox>
+
+                                    <HBox alignment="CENTER" prefHeight="42.0" prefWidth="548.0" spacing="10">
+                                        <children>
+                                            <TextArea fx:id="voenTextArea" disable="true" prefHeight="42.0" prefWidth="525.0" styleClass="form-control" text="VOEN-leri tertib olunan Excel fayli secin .." HBox.hgrow="ALWAYS" />
+                                            <Button fx:id="voenBtn" mnemonicParsing="false" prefHeight="42.0" styleClass="btn,btn-primary" text="SECMEK" />
+                                        </children>
+                                    </HBox>
+
+                                    <Button fx:id="updTable" mnemonicParsing="false" prefHeight="25.0" prefWidth="692.0" styleClass="btn,btn-success" text="Cedveli yenilemek .." />
+                                    <Button fx:id="startScript" mnemonicParsing="false" prefHeight="25.0" prefWidth="697.0" styleClass="btn,btn-danger" text="Skripti baslamaq" />
+                                    <Label alignment="CENTER" cache="true" lineSpacing="1.0" prefHeight="17.0" prefWidth="585.0" text="VERSIYA 1.0 | Sentyabr 2025" underline="true">
+                                        <font>
+                                            <Font name="Arial" size="9.0" />
+                                        </font>
+                                        <opaqueInsets>
+                                            <Insets top="20.0" />
+                                        </opaqueInsets>
+                                    </Label>
+                                </children>
+                            </VBox>
+                        </children>
+                    </AnchorPane>
+                </children>
+            </AnchorPane>
+        </content>
+    </Tab>
+</TabPane>
+
+    <AnchorPane fx:id="overlayPane"
+                visible="false"
+                style="-fx-background-color: rgba(0,0,0,0.3);"
+                StackPane.alignment="CENTER"
+                AnchorPane.topAnchor="0.0"
+                AnchorPane.leftAnchor="0.0"
+                AnchorPane.rightAnchor="0.0"
+                AnchorPane.bottomAnchor="0.0">
+
+        <children>
+            <VBox alignment="CENTER" spacing="10"
+                  AnchorPane.topAnchor="0.0"
+                  AnchorPane.leftAnchor="0.0"
+                  AnchorPane.rightAnchor="0.0"
+                  AnchorPane.bottomAnchor="0.0">
+
+                <children>
+                    <ProgressIndicator fx:id="progressIndicator"
+                                       prefWidth="100"
+                                       prefHeight="100"/>
+                    <Label text="Zehmet olmasa, gözləyin .."
+                           style="-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+                </children>
+            </VBox>
+        </children>
+    </AnchorPane>
+
+
+</StackPane>

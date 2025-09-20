@@ -1,0 +1,37 @@
+<component name="ArtifactManager">
+  <artifact type="javafx" name="TaxesAutomator">
+    <output-path>$PROJECT_DIR$/out/artifacts/TaxesAutomator</output-path>
+    <properties id="javafx-properties">
+      <options>
+        <option name="appClass" value="com.bizcon.taxesautomator.Launcher" />
+        <option name="description" value="Automation Tool for Taxes Service" />
+        <option name="htmlPlaceholderId" value="" />
+        <option name="icons">
+          <JavaFxApplicationIcons>
+            <option name="windowsIcon" value="$PROJECT_DIR$/dvx.ico" />
+          </JavaFxApplicationIcons>
+        </option>
+        <option name="title" value="E-Taxes AutoTool" />
+        <option name="vendor" value="Orkhan" />
+        <option name="version" value="1.0.0" />
+      </options>
+    </properties>
+    <root id="root">
+      <element id="archive" name="TaxesAutomator.jar">
+        <element id="module-output" name="TaxesAutomator" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-controls:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-controls:win:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-graphics:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-graphics:win:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-base:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-base:win:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-fxml:21.0.6" />
+        <element id="library" level="project" name="Maven: org.openjfx:javafx-fxml:win:21.0.6" />
+        <element id="library" level="project" name="Maven: org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0" />
+        <element id="library" level="project" name="Maven: com.fasterxml.jackson.core:jackson-databind:2.17.1" />
+        <element id="library" level="project" name="Maven: com.fasterxml.jackson.core:jackson-annotations:2.17.1" />
+        <element id="library" level="project" name="Maven: com.fasterxml.jackson.core:jackson-core:2.17.1" />
+      </element>
+    </root>
+  </artifact>
+</component>

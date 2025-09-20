@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane fx:controller="com.bizcon.taxesautomator.controllers.LicenseController" xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1" styleClass="bg-light">
+
+    <top>
+        <Label text="E-Vergi Avtomatlaşdırma Aləti"
+               style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #0d6efd;"/>
+    </top>
+
+    <center>
+        <VBox spacing="20" alignment="CENTER" styleClass="p-4">
+            <children>
+                <ImageView fx:id="logoImage" fitHeight="180" fitWidth="180" preserveRatio="true"/>
+
+                <Label text="Bu proqramdan istifadə etmək üçün lisenziya tələb olunur!"
+                       style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #212529;"/>
+
+                <TextField maxWidth="300" promptText="Lisenziya nömrəsini daxil edin"
+                           styleClass="form-control" fx:id="licenseField"/>
+
+                <Button fx:id="checkButton" text="Yoxla"
+                        style="-fx-background-color: #0d6efd; -fx-text-fill: white; -fx-font-weight: bold;"
+                        styleClass="btn, btn-primary"
+                        minWidth="120" minHeight="35"/>
+            </children>
+        </VBox>
+    </center>
+
+    <padding>
+        <Insets top="30" right="30" bottom="30" left="30"/>
+    </padding>
+</BorderPane>
