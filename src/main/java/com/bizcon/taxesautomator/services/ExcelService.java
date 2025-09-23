@@ -39,8 +39,9 @@ public class ExcelService {
             record.setAsanId(getCellValueAsString(row.getCell(3), workbook));
             record.setOxunmamis(getCellValueAsString(row.getCell(4), workbook).equals("1"));
             record.setMakeReport(getCellValueAsString(row.getCell(5), workbook).equals("1"));
-            record.setBaslangicTarixi(getCellValueAsString(row.getCell(6), workbook));
-            record.setBitmeTarixi(getCellValueAsString(row.getCell(7), workbook));
+            record.setDetailsReport(getCellValueAsString(row.getCell(6), workbook).equals("1"));
+            record.setBaslangicTarixi(getCellValueAsString(row.getCell(7), workbook));
+            record.setBitmeTarixi(getCellValueAsString(row.getCell(8), workbook));
 
             records.add(record);
 
