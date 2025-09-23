@@ -65,6 +65,8 @@ public class MainController extends ApiService implements Initializable, UiModif
     private final ObservableList<Record> records = FXCollections.observableArrayList();
     private final Preferences prefs = Preferences.userNodeForPackage(MainController.class);
     private Map<String, String> rowStyles = new HashMap<>();
+    private final javafx.beans.property.BooleanProperty loadingActive =
+            new javafx.beans.property.SimpleBooleanProperty(false);
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
@@ -76,6 +78,10 @@ public class MainController extends ApiService implements Initializable, UiModif
         }
         initializeTableView();
         setupRowFactory();
+
+        overlayPane.visibleProperty().bind(loadingActive);
+        progressIndicator.visibleProperty().bind(loadingActive);
+        startScript.disableProperty().bind(loadingActive);
 
         progressIndicator.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         progressIndicator.setPrefSize(100, 100);
@@ -120,12 +126,23 @@ public class MainController extends ApiService implements Initializable, UiModif
 
         startScript.setOnAction(actionEvent -> {
 
+
+
             if (prefs.get("folderSavePath", null) == null){
                 AlertorFX.show("Papka mutleq secilmelidir!", Alert.AlertType.WARNING);
                 return;
             }
 
             AlertorFX.show("Emeliyyat ugurla basladi! Cedvelde progresi gore bilersiniz", Alert.AlertType.INFORMATION);
+
+            if (loadingActive.get()) {
+                AlertorFX.show("Yukleme gedir, yeni emeliyyat gozleyir!", Alert.AlertType.INFORMATION);
+                return;
+            }
+
+            showProgressLoader(true);
+            beginRun(records.size());
+
             // Check if record fields are valid according to Azerbaijan standards
             List<Record> recordList = readRecords();
             for (Record record : recordList) {
@@ -165,7 +182,7 @@ public class MainController extends ApiService implements Initializable, UiModif
 
                         prepareApiCalls(recordList.size(), record.getAsanNomre(), record.getAsanId(),
                                 record.getSearchStatus(), startDate, endDate, record.getOxunmamis().get(),
-                                record.getMakeReport().get());
+                                record.getMakeReport().get(), record.getDetailsReport().get());
 
                     }else{
                         AlertorFX.show("Cedvelde sehv var! " + "ID: " + record.getAsanId() + "& Nomre: "
@@ -219,6 +236,7 @@ public class MainController extends ApiService implements Initializable, UiModif
         TableColumn<Record, String> asanIdColumn = new TableColumn<>("ASAN ID");
         TableColumn<Record, Boolean> oxunmamisColumn = new TableColumn<>("Oxunmamış");
         TableColumn<Record, Boolean> personalReportColumn = new TableColumn<>("Şəxsi hesabi");
+        TableColumn<Record, Boolean> extraPersonalReport = new TableColumn<>("Detalli hesab melumati");
         TableColumn<Record, String> baslangicTarixiColumn = new TableColumn<>("Başlanğıc tarixi");
         TableColumn<Record, String> bitmeTarixiColumn = new TableColumn<>("Bitmə tarixi");
 
@@ -252,6 +270,11 @@ public class MainController extends ApiService implements Initializable, UiModif
         personalReportColumn.setOnEditCommit(event ->
                 event.getRowValue().setMakeReport(event.getNewValue()));
 
+        extraPersonalReport.setCellValueFactory(cellData -> cellData.getValue().getDetailsReport());
+        extraPersonalReport.setCellFactory(tc -> new CheckBoxTableCell<>());
+        extraPersonalReport.setOnEditCommit(event ->
+                event.getRowValue().setDetailsReport(event.getNewValue()));
+
         baslangicTarixiColumn.setCellValueFactory(new PropertyValueFactory<>("baslangicTarixi"));
         baslangicTarixiColumn.setCellFactory(TextFieldTableCell.forTableColumn());
         baslangicTarixiColumn.setOnEditCommit(event ->
@@ -263,7 +286,7 @@ public class MainController extends ApiService implements Initializable, UiModif
                 event.getRowValue().setBitmeTarixi(event.getNewValue()));
 
         mainTable.getColumns().addAll(voenColumn, searchStatusColumn, asanNomreColumn,
-                asanIdColumn, oxunmamisColumn, personalReportColumn, baslangicTarixiColumn, bitmeTarixiColumn);
+                asanIdColumn, oxunmamisColumn, personalReportColumn, extraPersonalReport,baslangicTarixiColumn, bitmeTarixiColumn);
 
         mainTable.setItems(records);
     }
@@ -273,6 +296,7 @@ public class MainController extends ApiService implements Initializable, UiModif
             record.getVoen() != null && !record.getVoen().isEmpty() &&
                 record.getOxunmamis() != null  &&
                 record.getMakeReport() != null &&
+                record.getDetailsReport() != null &&
                 record.getBaslangicTarixi() != null && !record.getBaslangicTarixi().isEmpty() &&
                 record.getBitmeTarixi() != null && !record.getBitmeTarixi().isEmpty() &&
                 record.getSearchStatus() != null && !record.getSearchStatus().isEmpty() &&
@@ -293,7 +317,7 @@ public class MainController extends ApiService implements Initializable, UiModif
             mainTabPane.getSelectionModel().select(settingsTab);
         }
 
-        overlayPane.setVisible(state);
+        loadingActive.set(state);
     }
 
 
@@ -318,7 +342,7 @@ public class MainController extends ApiService implements Initializable, UiModif
     public void notifyCompletion(String message) {
         Platform.runLater(() -> {
             AlertorFX.show(message, Alert.AlertType.INFORMATION);
-            showProgressLoader(false);
+            loadingActive.set(false);
             mainTable.setEditable(true);
         });
     }
