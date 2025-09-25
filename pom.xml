@@ -91,6 +91,20 @@
             <version>6.8.3</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j2-impl -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.3</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+            <version>3.3.4</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -124,50 +138,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <configuration>
-                            <target>
-                                <exec executable="jpackage">
-                                    <arg value="--name"/>
-                                    <arg value="E-TaxesAutomator"/>
-                                    <arg value="--app-version"/>
-                                    <arg value="1.0"/>
-                                    <arg value="--type"/>
-                                    <arg value="exe"/>
-                                    <arg value="--input"/>
-                                    <arg value="${project.build.directory}"/>
-                                    <arg value="--main-jar"/>
-                                    <arg value="TaxesAutomator-1.0-SNAPSHOT-shaded.jar"/>
-                                    <arg value="--main-class"/>
-                                    <arg value="com.bizcon.taxesautomator.Launcher"/>
-                                    <arg value="--icon"/>
-                                    <arg value="dvx.ico"/>
-                                    <arg value="--win-shortcut"/>
-                                    <arg value="--win-menu"/>
-                                    <arg value="--win-console"/>
-                                    <arg value="--module-path"/>
-                                    <arg value="D:\openjfx-21.0.8_windows-x64_bin-sdk\javafx-jmods-21.0.8"/>
-                                    <arg value="--add-modules"/>
-                                    <arg value="javafx.controls,javafx.fxml,javafx.graphics"/>
-                                </exec>
-
-                            </target>
-                        </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
