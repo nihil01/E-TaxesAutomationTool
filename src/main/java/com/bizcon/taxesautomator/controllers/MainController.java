@@ -2,9 +2,11 @@ package com.bizcon.taxesautomator.controllers;
 
 import com.bizcon.taxesautomator.models.Record;
 import com.bizcon.taxesautomator.services.ExcelService;
+import com.bizcon.taxesautomator.services.LoggingService;
 import com.bizcon.taxesautomator.utils.AlertorFX;
 import com.bizcon.taxesautomator.services.ApiService;
 import com.bizcon.taxesautomator.utils.CheckVariants;
+import com.bizcon.taxesautomator.utils.MessageType;
 import com.bizcon.taxesautomator.utils.UiModifier;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -70,6 +72,7 @@ public class MainController extends ApiService implements Initializable, UiModif
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
+        LoggingService.logData("Application started!", MessageType.INFO);
         this.uiModifier = this;
         try {
             checkPreferences();
