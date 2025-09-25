@@ -40,7 +40,7 @@ public class ApiService implements ApiUtils {
     protected UiModifier uiModifier;
 
     protected ApiService() {
-        System.out.println("ApiService created!");
+        LoggingService.logData("ApiService created!", MessageType.INFO);
         client = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(15))
@@ -48,12 +48,17 @@ public class ApiService implements ApiUtils {
     }
 
     private void checkProcessingCompletion() {
-        System.out.println("Checking completion - Processed: " + PROCESSED_RECORDS.get() + ", Total: " + TOTAL_RECORDS_COUNT.get());
+        LoggingService.logData("Checking completion - Processed: " + PROCESSED_RECORDS.get()
+                + ", Total: " + TOTAL_RECORDS_COUNT.get(), MessageType.INFO);
+        
         if (PROCESSED_RECORDS.get() >= TOTAL_RECORDS_COUNT.get() && isCompletionNotified.compareAndSet(false, true)) {
             uiModifier.notifyCompletion(
-                    "Emeliyyat ugurla bitdi!\n Ugurlu: %s | Ugursuz: %s"
+                    ("Emeliyyat ugurla bitdi!\n Ugurlu: %s | Ugursuz: %s\n")
                             .formatted(COMPLETED_RECORDS_COUNT.get(), FAILED_RECORDS_COUNT.get())
             );
+            
+            LoggingService.logData("Operation finished!", MessageType.INFO);
+            
         }
     }
 
@@ -81,18 +86,18 @@ public class ApiService implements ApiUtils {
 
             client.sendAsync(browserHistoryRequest, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(response ->
-                        System.out.println("Browser history POST status: " + response.statusCode()));
+                        LoggingService.logData("Browser history POST status: " + response.statusCode(), MessageType.INFO));
 
         HttpRequest firstRequest = formRequest(token, null);
 
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                System.out.println("Current retry count: " + retryCount[0]);
+                LoggingService.logData("Current retry count: " + retryCount[0], MessageType.INFO);
 
                 if (retryCount[0] >= MAX_RETRIES) {
                     timer.cancel();
-                    System.out.println("Max retries reached, stopping timer");
+                    LoggingService.logData("Max retries reached, stopping timer", MessageType.WARN);
                     uiModifier.markAsFailed(asanID);
                     FAILED_RECORDS_COUNT.incrementAndGet();
                     PROCESSED_RECORDS.incrementAndGet();
@@ -101,7 +106,7 @@ public class ApiService implements ApiUtils {
                 }
 
                 if (!firstRequestTriggered[0]) {
-                    System.out.println("First request triggered");
+                    LoggingService.logData("First request triggered", MessageType.INFO);
                     GetAPIStatusState(firstRequest, timer, cookieValue, token, asanID, searchElement,
                             dateStart, dateEnd, unread, makeReport, detailReport);
                     firstRequestTriggered[0] = true;
@@ -115,6 +120,7 @@ public class ApiService implements ApiUtils {
                         FAILED_RECORDS_COUNT.incrementAndGet();
                         PROCESSED_RECORDS.incrementAndGet();
                         checkProcessingCompletion();
+                        LoggingService.logData(e.getMessage(), MessageType.ERROR);
                     }
                 }
 
@@ -133,18 +139,18 @@ public class ApiService implements ApiUtils {
     ) {
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .thenAccept(response -> {
-                System.out.println("API STATUS STA2TE: " + response.statusCode());
-                System.out.println("Intermediary API body");
-                System.out.println(response.body());
+                LoggingService.logData("API STATUS STA2TE: " + response.statusCode(), MessageType.INFO);
+                LoggingService.logData("Intermediary API body", MessageType.INFO);
+                LoggingService.logData(response.body(), MessageType.INFO);
 
-                System.out.println("API STATUS STATE RESPONSE HEADERS");
-                System.out.println(response.headers());
+                LoggingService.logData("API STATUS STATE RESPONSE HEADERS", MessageType.INFO);
+                LoggingService.logData(response.headers().toString(), MessageType.INFO);
 
                 if (response.statusCode() == 200 && response.body().contains("\"successful\":true")) {
                     timer.cancel();
                     try {
-                        System.out.println(response.body());
-                        System.out.println("REQUEST SUCCESSFUL! OBTAINING CERTIFICATES ...");
+                        LoggingService.logData(response.body(), MessageType.INFO);
+                        LoggingService.logData("REQUEST SUCCESSFUL! OBTAINING CERTIFICATES ...", MessageType.INFO);
                         getCertificates(cookieValue.get(), token, asanID, searchElement,
                                 dateStart, dateEnd, unread, makeReport, detailReport);
                     } catch (URISyntaxException e) {
@@ -162,7 +168,7 @@ public class ApiService implements ApiUtils {
                     .orElse(null));
             })
             .exceptionally(ex -> {
-                System.err.println("Async error: " + ex.getMessage());
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                 uiModifier.markAsFailed(asanID);
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
@@ -187,27 +193,27 @@ public class ApiService implements ApiUtils {
         CompletableFuture<HttpResponse<String>> responseFuture = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
 
         responseFuture.thenAccept(response -> {
-            System.out.println(response.body());
+            LoggingService.logData(response.body(), MessageType.INFO);
             if (response.statusCode() == 200 && response.body().contains("\"started\":true")) {
                 // Get JWT token from response headers
-                System.out.println(response.headers());
+                LoggingService.logData(response.headers().toString(), MessageType.INFO);
                 response.headers().firstValue("x-authorization").ifPresentOrElse(token -> {
                     try {
                         getRequestStatus(token, asanID, searchElement, dateStart, dateEnd, unread, makeReport, detailReport);
                     } catch (URISyntaxException e) {
                         throw new RuntimeException(e);
                     }
-                }, () -> System.out.println("x-authorization header not found!"));
+                }, () -> LoggingService.logData("x-authorization header not found!", MessageType.WARN));
 
             } else {
-                System.out.println("Authentication failed!");
+                LoggingService.logData("Authentication failed!", MessageType.WARN);
                 uiModifier.markAsFailed(asanID);
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
                 checkProcessingCompletion();
             }
         }).exceptionally(throwable -> {
-            System.err.println("Async error: " + throwable.getMessage());
+            LoggingService.logData(throwable.getMessage(), MessageType.ERROR);
             uiModifier.markAsFailed(asanID);
             FAILED_RECORDS_COUNT.incrementAndGet();
             PROCESSED_RECORDS.incrementAndGet();
@@ -228,10 +234,10 @@ public class ApiService implements ApiUtils {
             .header("x-authorization", "Bearer " + token);
 
         if (cookieValue != null && !cookieValue.isEmpty()){
-            System.out.println("Cookie value: " + cookieValue);
+            LoggingService.logData("Cookie value: " + cookieValue, MessageType.INFO);
             request.setHeader("JSESSIONID", cookieValue);
         } else {
-            System.out.println("Cookie value is empty ... skipping ...");
+            LoggingService.logData("Cookie value is empty ... skipping ...", MessageType.WARN);
         }
 
         return request.build();
@@ -253,9 +259,9 @@ public class ApiService implements ApiUtils {
 
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .thenAccept(response -> {
-                System.out.println("Tried to get certificates ...");
-                System.out.println("Response ...");
-                System.out.println(response.statusCode());
+                LoggingService.logData("Tried to get certificates ...", MessageType.INFO);
+                LoggingService.logData("Response ...", MessageType.INFO);
+                LoggingService.logData(String.valueOf(response.statusCode()), MessageType.INFO);
 
                 if (response.statusCode() == 200 && response.body().contains("certificates")) {
                     try {
@@ -263,71 +269,71 @@ public class ApiService implements ApiUtils {
                         CertificateModel.CertificatesResponse certs = mapper.readValue(response.body(),
                                 CertificateModel.CertificatesResponse.class);
 
-                        System.out.println("Parsed certificates:");
+                        LoggingService.logData("Parsed certificates:", MessageType.INFO);
 
-                        System.out.println(response.body());
+                        LoggingService.logData(response.body(), MessageType.INFO);
+
+                        boolean taxpayerFound = false;
+
                         for (CertificateModel.Certificate cert : certs.getCertificates()) {
+                            LoggingService.logData(cert.toString(), MessageType.INFO);
+
                             if (cert.getIndividualInfo() != null) {
-                                System.out.println("Individual: " + cert.getIndividualInfo().getName() +
-                                        " (FIN: " + cert.getIndividualInfo().getFin() + ")");
+                                LoggingService.logData("Individual: " + cert.getIndividualInfo().getName() +
+                                        " (FIN: " + cert.getIndividualInfo().getFin() + ")", MessageType.INFO);
                             }
                             if (cert.getLegalInfo() != null) {
-                                System.out.println("Legal: " + cert.getLegalInfo().getName() +
-                                        " (TIN: " + cert.getLegalInfo().getTin() + ")");
+                                LoggingService.logData("Here is legal info bro i need it", MessageType.INFO);
+                                LoggingService.logData("Legal: " + cert.getLegalInfo().getName() +
+                                        " (TIN: " + cert.getLegalInfo().getTin() + ")", MessageType.INFO);
                             }
-                            System.out.println("Position: " + cert.getPosition());
-                            System.out.println("Has access: " + cert.isHasAccess());
-                            System.out.println("------");
-
-                            System.err.println("I am searching for element: " + searchElement);
-                            System.out.println("Here is legal info bro i need it");
-                            System.out.println(cert.getLegalInfo());
+                            LoggingService.logData("Position: " + cert.getPosition(), MessageType.INFO);
+                            LoggingService.logData("Has access: " + cert.isHasAccess(), MessageType.INFO);
+                            LoggingService.logData("I am searching for element: " + searchElement, MessageType.INFO);
 
                             if (cert.getLegalInfo() != null && cert.getLegalInfo().getName()
                                     .toLowerCase(Locale.ROOT).contains(searchElement.toLowerCase(Locale.ROOT))) {
 
-                                System.out.println("Trying to choose a tax payer based on SEARCH_ELEMENT");
-                                System.out.println(searchElement);
+                                taxpayerFound = true;
+                                LoggingService.logData("Trying to choose a tax payer based on SEARCH_ELEMENT", MessageType.INFO);
+                                LoggingService.logData(searchElement, MessageType.INFO);
 
                                 response.headers()
                                     .firstValue("Set-Cookie")
                                     .ifPresentOrElse(s -> {
                                         if (s.contains("JSESSIONID")){
-                                            System.out.println("Cookie value: " + s);
+                                            LoggingService.logData("Cookie value: " + s, MessageType.INFO);
                                             try {
                                                 chooseTaxPayer(cert.getLegalInfo().getTin(), cookieValue, token,
                                                         asanID, searchElement, dateStart, dateEnd, unread, makeReport,
                                                         detailReport);
                                             } catch (URISyntaxException e) {
-                                                throw new RuntimeException(e);
+                                                LoggingService.logData(e.getMessage(), MessageType.ERROR);
+                                                uiModifier.markAsFailed(asanID);
+                                                FAILED_RECORDS_COUNT.incrementAndGet();
+                                                PROCESSED_RECORDS.incrementAndGet();
+                                                checkProcessingCompletion();;
                                             }
                                         }else{
-                                            System.out.println("Cookie containing JSESSIONID not found!");
-                                            uiModifier.markAsFailed(asanID);
-                                            FAILED_RECORDS_COUNT.incrementAndGet();
-                                            PROCESSED_RECORDS.incrementAndGet();
-                                            checkProcessingCompletion();
-
+                                            LoggingService.logData("Cookie containing JSESSIONID not found!",
+                                                    MessageType.WARN);
                                         }
-
                                     }, () -> {
-                                        System.out.println("Cookies not found !!");
-                                        uiModifier.markAsFailed(asanID);
-                                        FAILED_RECORDS_COUNT.incrementAndGet();
-                                        PROCESSED_RECORDS.incrementAndGet();
-                                        checkProcessingCompletion();
+                                        LoggingService.logData("Cookies not found !!", MessageType.WARN);
                                     });
-
-                            }else{
-                                System.out.println("Could not find tax payer's certificate ...");
-                                uiModifier.markAsFailed(asanID);
-                                FAILED_RECORDS_COUNT.incrementAndGet();
-                                PROCESSED_RECORDS.incrementAndGet();
-                                checkProcessingCompletion();
                             }
-
                         }
+
+                        if (!taxpayerFound) {
+                            LoggingService.logData("Could not find tax payer's certificate ...", MessageType.WARN);
+                            uiModifier.markAsFailed(asanID);
+                            FAILED_RECORDS_COUNT.incrementAndGet();
+                            PROCESSED_RECORDS.incrementAndGet();
+                            checkProcessingCompletion();
+                        }
+
                     } catch (Exception e) {
+                        LoggingService.logData(e.getMessage(), MessageType.ERROR);
                         uiModifier.markAsFailed(asanID);
                         FAILED_RECORDS_COUNT.incrementAndGet();
                         PROCESSED_RECORDS.incrementAndGet();
@@ -336,7 +342,7 @@ public class ApiService implements ApiUtils {
                 }
             })
             .exceptionally(ex -> {
-                System.err.println("Async error: " + ex.getMessage());
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                 uiModifier.markAsFailed(asanID);
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
@@ -344,7 +350,6 @@ public class ApiService implements ApiUtils {
                 return null;
             });
     }
-
     //4
     protected void chooseTaxPayer(
             String tin, String cookieValue, String token, String asanID,
@@ -353,9 +358,9 @@ public class ApiService implements ApiUtils {
     ) throws URISyntaxException {
         URI endpoint = new URI(BASE_URL + "/auth/public/v1/asanImza/chooseTaxpayer");
 
-        System.out.println("Token when choosing taxpayer ..." + token);
-        System.out.println("Cookie when choosing taxpayer ..." + cookieValue);
-        System.out.println("TIN " + tin);
+        LoggingService.logData("Token when choosing taxpayer ...", MessageType.INFO);
+        LoggingService.logData("Cookie when choosing taxpayer ..." + cookieValue, MessageType.INFO);
+        LoggingService.logData("TIN " + tin, MessageType.INFO);
 
         String body = String.format("{\"ownerType\":\"legal\",\"legalTin\":\"%s\"}", tin);
 
@@ -370,10 +375,10 @@ public class ApiService implements ApiUtils {
 
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .thenAccept(response -> {
-                System.out.println("Tried to choose tax payer ...");
-                System.out.println("Response status: " + response.statusCode());
-                System.out.println("Response body: " + response.body());
-                System.out.println("Response headers: " + response.headers());
+                LoggingService.logData("Tried to choose tax payer ...", MessageType.INFO);
+                LoggingService.logData("Response status: " + response.statusCode(), MessageType.INFO);
+                LoggingService.logData("Response body: " + response.body(), MessageType.INFO);
+                LoggingService.logData("Response headers: " + response.headers(), MessageType.INFO);
 
                 if (response.statusCode() == 200) {
                     AtomicReference<String> cookie = new AtomicReference<>();
@@ -394,7 +399,7 @@ public class ApiService implements ApiUtils {
                     });
 
                     if (cookie.get() != null && xAuth.get() != null) {
-                        System.out.println("Chose tax payer successfully!");
+                        LoggingService.logData("Chose tax payer successfully!", MessageType.INFO);
                         //Firstly, get reports for the taxpayer
                         CompletableFuture<String> afterReports = makeReport
                             ? downloadAndSaveReportAsync(xAuth.get(), cookie.get(), searchElement, detailReport, MessageType.PDF)
@@ -424,6 +429,7 @@ public class ApiService implements ApiUtils {
                                 uiModifier.markAsCompleted(asanID);
                                 COMPLETED_RECORDS_COUNT.incrementAndGet();
                             } else {
+                                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                                 uiModifier.markAsFailed(asanID);
                                 FAILED_RECORDS_COUNT.incrementAndGet();
                             }
@@ -436,12 +442,12 @@ public class ApiService implements ApiUtils {
                         FAILED_RECORDS_COUNT.incrementAndGet();
                         PROCESSED_RECORDS.incrementAndGet();
                         checkProcessingCompletion();
-                        System.out.println("Error while choosing taxpayer ... Null values detected ...");
+                        LoggingService.logData("Error while choosing taxpayer ... Null values detected ...", MessageType.WARN);
                     }
                 }}
             )
             .exceptionally(ex -> {
-                System.err.println("Async error: " + ex.getMessage());
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                 uiModifier.markAsFailed(asanID);
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
@@ -507,22 +513,22 @@ public class ApiService implements ApiUtils {
             }""".formatted(!unread ? "null" : true, dateStart, dateEnd);
         }
 
-        System.out.println("Request " + typePath + " ...");
-        System.out.println(body);
+        LoggingService.logData("Request " + typePath + " ...", MessageType.INFO);
+        LoggingService.logData(body, MessageType.INFO);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(endpoint)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .timeout(Duration.ofSeconds(15))
-                .header("Cookie", cookieValue)
-                .header("x-authorization", "Bearer " + jwtToken)
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
-                .build();
+            .uri(endpoint)
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .timeout(Duration.ofSeconds(15))
+            .header("Cookie", cookieValue)
+            .header("x-authorization", "Bearer " + jwtToken)
+            .header("Content-Type", "application/json")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
+            .build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenCompose(response -> {
-                    System.out.println("Messages response " + typePath + ": " + response.statusCode());
+                    LoggingService.logData("Messages response " + typePath + ": " + response.statusCode(), MessageType.INFO);
                     if (response.statusCode() != 200) {
                         return CompletableFuture.failedFuture(new IllegalStateException("HTTP " + response.statusCode() + " for " + typePath));
                     }
@@ -541,12 +547,12 @@ public class ApiService implements ApiUtils {
                         return CompletableFuture.failedFuture(e);
                     }
 
-                    System.out.println("Messages count: " +
+                    LoggingService.logData("Messages count: " +
                             (documentModel.getMessages() == null ? 0 : documentModel.getMessages().size())
-                    );
+                    , MessageType.INFO);
 
-                    System.out.println("Messages");
-                    System.out.println(documentModel.getMessages());
+                    LoggingService.logData("Messages", MessageType.INFO);
+                    LoggingService.logData(documentModel.getMessages().toString(), MessageType.INFO);
 
                     // Если сообщений нет — возвращаем текущую (возможно обновлённую) куку
                     if (documentModel.getMessages() == null || documentModel.getMessages().isEmpty()) {
@@ -557,7 +563,7 @@ public class ApiService implements ApiUtils {
                     CompletableFuture<String> chain = CompletableFuture.completedFuture(nextCookie);
                     for (DocumentModel.Document doc : documentModel.getMessages()) {
                         chain = chain.thenCompose(curCookie ->
-                            getFileInsideMessageAsync(doc.getId(), curCookie, jwtToken, searchElement, msg)
+                            getFileInsideMessageAsync(doc.getId(), doc.getCreatedAt(),curCookie, jwtToken, searchElement, msg)
                                 .thenApply(updatedCookie -> {
                                     // fallback на текущую куку, если метод вернул пустую
                                     return (updatedCookie != null && !updatedCookie.isBlank()) ? updatedCookie : curCookie;
@@ -567,13 +573,14 @@ public class ApiService implements ApiUtils {
                     return chain;
                 })
                 .exceptionally(ex -> {
+                    LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                     throw new java.util.concurrent.CompletionException(ex);
                 });
     }
 
     //6
     private CompletableFuture<String> getFileInsideMessageAsync(
-            String inboxID, String cookieValue, String jwtToken, String searchElement, MessageType msg) {
+            String inboxID, String inboxCreatedAt, String cookieValue, String jwtToken, String searchElement, MessageType msg) {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/edi/public/v1/message/%s?sourceSystem=avis".formatted(inboxID)))
@@ -588,47 +595,63 @@ public class ApiService implements ApiUtils {
         ObjectMapper mapper = new ObjectMapper();
 
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenAccept(response -> {
-                    if (response.statusCode() != 200) {
-                        promise.completeExceptionally
-                            (
-                                new IllegalStateException("Inbox item fetch failed: " + response.statusCode())
-                            );
-                        return;
+            .thenAccept(response -> {
+                if (response.statusCode() != 200) {
+                    promise.completeExceptionally
+                        (
+                            new IllegalStateException("Inbox item fetch failed: " + response.statusCode())
+                        );
+                    return;
+                }
+
+                String newCookie = response.headers().firstValue("Set-Cookie")
+                        .filter(s -> s.contains("JSESSIONID"))
+                        .map(s -> s.split(";")[0])
+                        .orElse(cookieValue);
+
+                List<CompletableFuture<Void>> fileTasks = new ArrayList<>();
+                try {
+                    MessageDto dto = mapper.readValue(response.body(), MessageDto.class);
+                    String fileTimestamp = normalizeDate(inboxCreatedAt);
+
+                    LoggingService.logData("File timestamp " + fileTimestamp, MessageType.INFO);
+
+                    String filePart = dto.getSubject() != null ? dto.getSubject() : dto.getContent();
+
+                    LoggingService.logData("File Part " + filePart, MessageType.INFO);
+
+                    LoggingService.logData("Data i found inside message", MessageType.INFO);
+                    LoggingService.logData(dto.toString(), MessageType.INFO);
+
+                    for (MessageDto.FileDto file: dto.getFiles()) {
+                        String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+                        String rawName = (dto.getFiles().size() == 1)
+                                ? (filePart + "." + ext)
+                                : (filePart + UUID.randomUUID() + "." + ext);
+
+                        String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
+
+                        LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
+
+                        fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
+                                jwtToken, searchElement, msg));
                     }
 
-                    String newCookie = response.headers().firstValue("Set-Cookie")
-                            .filter(s -> s.contains("JSESSIONID"))
-                            .map(s -> s.split(";")[0])
-                            .orElse(cookieValue);
-
-                    List<CompletableFuture<Void>> fileTasks = new java.util.ArrayList<>();
-                    try {
-                        MessageDto dto = mapper.readValue(response.body(), MessageDto.class);
-                        String filePart = dto.getSubject() != null ? dto.getSubject() : dto.getContent();
-
-                        for (MessageDto.FileDto file: dto.getFiles()) {
-                            String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-                            String rawName = (dto.getFiles().size() == 1)
-                                    ? (filePart + "." + ext)
-                                    : (filePart + java.util.UUID.randomUUID() + "." + ext);
-
-                            String fileName = sanitizeForWindows(rawName);
-
-                            fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
-                                    jwtToken, searchElement, msg));
-                        }
-
-                    } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
-                    }
-                    CompletableFuture.allOf(fileTasks.toArray(new CompletableFuture[0]))
-                            .whenComplete((v, ex) -> {
-                                if (ex == null) promise.complete(newCookie);
-                                else promise.completeExceptionally(ex);
-                            });
-                })
-                .exceptionally(ex -> { promise.completeExceptionally(ex); return null; });
+                } catch (JsonProcessingException e) {
+                    LoggingService.logData(e.getMessage(), MessageType.ERROR);
+                    throw new RuntimeException(e);
+                }
+                CompletableFuture.allOf(fileTasks.toArray(new CompletableFuture[0]))
+                        .whenComplete((v, ex) -> {
+                            if (ex == null) promise.complete(newCookie);
+                            else promise.completeExceptionally(ex);
+                        });
+            })
+            .exceptionally(ex -> {
+                promise.completeExceptionally(ex);
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
+                return null;
+            });
 
         return promise;
     }
@@ -684,7 +707,7 @@ public class ApiService implements ApiUtils {
                 if (fileResponse.statusCode() != 200) {
                     throw new IllegalStateException("Report download failed: " + fileResponse.statusCode());
                 }
-                System.out.println("Report downloaded successfully to: " + filePath);
+                LoggingService.logData("Report downloaded successfully to: " + filePath, MessageType.INFO);
 
                 return fileResponse.headers().allValues("Set-Cookie").stream()
                     .filter(s -> s.contains("JSESSIONID"))
@@ -694,7 +717,7 @@ public class ApiService implements ApiUtils {
 
             })
             .exceptionally(ex -> {
-                System.err.println("Report download error: " + ex.getMessage());
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                 throw new java.util.concurrent.CompletionException(ex);
             });
     }
@@ -703,8 +726,8 @@ public class ApiService implements ApiUtils {
             String documentID, String fileName, String jwtToken, String searchElement, MessageType msg) {
 
         CompletableFuture<Void> promise = new CompletableFuture<>();
-        System.out.println("Downloading file with fileName " + fileName);
-        System.out.println("Document ID " + documentID);
+        LoggingService.logData("Downloading file with fileName " + fileName, MessageType.INFO);
+        LoggingService.logData("Document ID " + documentID, MessageType.INFO);
         String savePath = prefs.get("folderSavePath", null);
         if (savePath == null){
             promise.completeExceptionally(new IllegalStateException("Upload path is null"));
@@ -721,8 +744,8 @@ public class ApiService implements ApiUtils {
         Path messageTypePath = createUploadDir(dirPath.toString(), msg == MessageType.INBOX ? "daxil_olanlar" : "gonderilenler");
 
         Path filePath = messageTypePath.resolve(fileName);
-        System.out.println("Path to save a file");
-        System.out.println(filePath);
+        LoggingService.logData("Path to save a file", MessageType.INFO);
+        LoggingService.logData(String.valueOf(filePath), MessageType.INFO);
 
         HttpRequest fileReq = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/filestorage/public/v1/download/%s?type=avis".formatted(documentID)))
@@ -739,7 +762,7 @@ public class ApiService implements ApiUtils {
                 )
             .thenAccept(fileResponse -> {
                 if (fileResponse.statusCode() == 200) {
-                    System.out.println("File downloaded successfully to: " + filePath);
+                    LoggingService.logData("File downloaded successfully to: " + filePath, MessageType.INFO);
                     promise.complete(null);
                 } else {
                     promise.completeExceptionally(new IllegalStateException("File download failed: " + fileResponse.statusCode()));
@@ -747,6 +770,7 @@ public class ApiService implements ApiUtils {
             })
             .exceptionally(ex -> {
                 promise.completeExceptionally(ex);
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                 return null;
             });
 
@@ -764,6 +788,7 @@ public class ApiService implements ApiUtils {
             FAILED_RECORDS_COUNT.incrementAndGet();
             PROCESSED_RECORDS.incrementAndGet();
             checkProcessingCompletion();
+            LoggingService.logData(e.getMessage(), MessageType.ERROR);
         }
     }
 
