@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,6 +37,8 @@ public class ApiService implements ApiUtils {
 
     private AtomicInteger FAILED_RECORDS_COUNT = new AtomicInteger(0);
     private AtomicInteger COMPLETED_RECORDS_COUNT = new AtomicInteger(0);
+
+    private final HashSet<String> asanIDs = new HashSet<>();
 
     protected UiModifier uiModifier;
 
@@ -53,10 +56,12 @@ public class ApiService implements ApiUtils {
         
         if (PROCESSED_RECORDS.get() >= TOTAL_RECORDS_COUNT.get() && isCompletionNotified.compareAndSet(false, true)) {
             uiModifier.notifyCompletion(
-                    ("Emeliyyat ugurla bitdi!\n Ugurlu: %s | Ugursuz: %s\n")
-                            .formatted(COMPLETED_RECORDS_COUNT.get(), FAILED_RECORDS_COUNT.get())
+                    ("Emeliyyat bitdi!\n Ugurlu: %s | Ugursuz: %s\n")
+                            .formatted(COMPLETED_RECORDS_COUNT.get(), FAILED_RECORDS_COUNT.get()),
+                    new HashSet<>(asanIDs)
             );
-            
+
+            LoggingService.logData("Possible assanIDs to be cleared: " + asanIDs.size(), MessageType.INFO);
             LoggingService.logData("Operation finished!", MessageType.INFO);
             
         }
@@ -428,11 +433,19 @@ public class ApiService implements ApiUtils {
                             if (ex == null) {
                                 uiModifier.markAsCompleted(asanID);
                                 COMPLETED_RECORDS_COUNT.incrementAndGet();
-                            } else {
+                                asanIDs.add(asanID);
+                            } else if (ex.getMessage().contains("HTTP 404")){
+                                LoggingService.logData(ex.getMessage() +"\n 404 error found," +
+                                        " but i mark it as completed", MessageType.WARN);
+                                uiModifier.markAsCompleted(asanID);
+                                COMPLETED_RECORDS_COUNT.incrementAndGet();
+                                asanIDs.add(asanID);
+                            }else{
                                 LoggingService.logData(ex.getMessage(), MessageType.ERROR);
                                 uiModifier.markAsFailed(asanID);
                                 FAILED_RECORDS_COUNT.incrementAndGet();
                             }
+
                             PROCESSED_RECORDS.incrementAndGet();
                             checkProcessingCompletion();
                         });
@@ -798,6 +811,7 @@ public class ApiService implements ApiUtils {
         COMPLETED_RECORDS_COUNT.set(0);
         TOTAL_RECORDS_COUNT.set(0);
         isCompletionNotified.set(false);
+        asanIDs.clear();
     }
 
     protected void beginRun(int total) {
