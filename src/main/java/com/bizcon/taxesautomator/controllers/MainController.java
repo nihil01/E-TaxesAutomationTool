@@ -24,6 +24,7 @@ import javafx.stage.FileChooser;
 import java.io.*;
 import java.net.URL;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -62,6 +63,10 @@ public class MainController extends ApiService implements Initializable, UiModif
     @FXML
     private TabPane mainTabPane;
 
+    @FXML
+    private Button exportScript, clearScript;
+
+    private HashSet<String> asanIDs = new HashSet<>();
     private final DirectoryChooser directoryChooser = new DirectoryChooser();
     private final FileChooser fileChooser = new FileChooser();
     private final ObservableList<Record> records = FXCollections.observableArrayList();
@@ -196,7 +201,72 @@ public class MainController extends ApiService implements Initializable, UiModif
                 }
                 }
         });
+
+        exportScript.setOnAction(actionEvent -> {
+            if (records.isEmpty()){
+                AlertorFX.show("Siyahi bosdur!", Alert.AlertType.WARNING);
+                return;
+            }
+
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"))
+                    .replaceAll("[\\s:.]", "_");
+
+            TextInputDialog dialog = new TextInputDialog("Export(%s).xlsx".formatted(timestamp));
+            dialog.setTitle("Export excel file");
+            dialog.setHeaderText("Excel fayli ucun adi daxil edin\nFaylin yuklemesi ucun qovluq: %s\\Downloads"
+                .formatted(
+                    System.getProperty("user.home")
+            ));
+
+            dialog.getEditor().textProperty().addListener((observable, oldValue, newValue) -> {
+                if (!newValue.endsWith(".xlsx")) {
+                    dialog.getEditor().setText(newValue + ".xlsx");
+                }
+            });
+
+            dialog.setContentText("AD: ");
+            Optional<String> result = dialog.showAndWait();
+
+            result.ifPresent(name -> {
+                if (name.isEmpty()) {
+                    AlertorFX.show("Faylin adi bos olmamalidir!", Alert.AlertType.ERROR);
+                    return;
+                }
+
+                try {
+                    ExcelService.writeExcelFile(mainTable.getItems().stream().toList(), name);
+                    AlertorFX.show("Ugurlu emeliyyat!", Alert.AlertType.CONFIRMATION);
+                    LoggingService.logData("Excel file exported!", MessageType.INFO);
+                } catch (IOException e) {
+                    AlertorFX.show("Ugursuz emeliyyat!", Alert.AlertType.CONFIRMATION);
+                    LoggingService.logData("Excel file export failed!", MessageType.ERROR);
+                }
+
+            });
+
+        });
+
+        clearScript.setOnAction(actionEvent -> {
+
+            System.out.println("Provided ASAN IDs");
+            System.out.println(asanIDs);
+
+            if (!asanIDs.isEmpty()){
+
+                List<Record> recordsToBeRemoved = records.stream().filter(
+                record -> asanIDs.contains(record.getAsanId())
+                ).toList();
+
+                records.removeAll(recordsToBeRemoved);
+                LoggingService.logData("Siyahi temizledi!", MessageType.INFO);
+
+            }
+
+
+        });
+
     }
+
 
 
     //UI INITIALIZATION
@@ -342,10 +412,14 @@ public class MainController extends ApiService implements Initializable, UiModif
     }
 
     @Override
-    public void notifyCompletion(String message) {
+    public void notifyCompletion(String message, HashSet<String> asanIDsFromService) {
         Platform.runLater(() -> {
+            this.asanIDs.clear();
+            this.asanIDs.addAll(asanIDsFromService);
+
             AlertorFX.show(message, Alert.AlertType.INFORMATION);
             loadingActive.set(false);
+            clearScript.setDisable(this.asanIDs.isEmpty());
             mainTable.setEditable(true);
         });
     }
