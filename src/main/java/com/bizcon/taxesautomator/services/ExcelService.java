@@ -4,8 +4,12 @@ import com.bizcon.taxesautomator.models.Record;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -77,6 +81,47 @@ public class ExcelService {
         }
     }
 
+    public static void writeExcelFile(List<Record> records, String fileName) throws IOException {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Sheet");
 
+        // Create header row
+        Row headerRow = sheet.createRow(0);
+        String[] headers = {"voen", "search", "asan_phone", "asan_id", "mode",
+                          "account", "details", "date_from", "date_to"};
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+        }
 
+        // Create data rows
+        int rowNum = 1;
+        for (Record record : records) {
+            Row row = sheet.createRow(rowNum++);
+            row.createCell(0).setCellValue(record.getVoen());
+            row.createCell(1).setCellValue(record.getSearchStatus());
+            row.createCell(2).setCellValue(record.getAsanNomre());
+            row.createCell(3).setCellValue(record.getAsanId());
+            row.createCell(4).setCellValue(record.getOxunmamis().get() ? "1" : "0");
+            row.createCell(5).setCellValue(record.getMakeReport().get() ? "1" : "0");
+            row.createCell(6).setCellValue(record.getDetailsReport().get() ? "1" : "0");
+            row.createCell(7).setCellValue(record.getBaslangicTarixi());
+            row.createCell(8).setCellValue(record.getBitmeTarixi());
+        }
+
+        // Auto size columns
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+
+        //Save path
+        String userHome = System.getProperty("user.home");
+        Path downloadsPath = Paths.get(userHome ,"Downloads", fileName);
+
+        // Write the workbook to file
+        try (FileOutputStream fileOut = new FileOutputStream(downloadsPath.toFile())) {
+            workbook.write(fileOut);
+        }
+        workbook.close();
+    }
 }
