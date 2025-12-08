@@ -4,7 +4,6 @@ import com.bizcon.taxesautomator.models.Record;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -61,6 +60,14 @@ public class ExcelService {
 
     private static String getCellValueAsString(Cell cell, Workbook workbook) {
         if (cell == null) return "";
+
+        System.out.printf("Processing cell with type %s", cell.getCellType().toString());
+
+        try {
+            System.out.println(cell.getStringCellValue());
+        } catch (Exception e) {
+            System.out.println((long) cell.getNumericCellValue());
+        }
 
         switch (cell.getCellType()) {
             case STRING:

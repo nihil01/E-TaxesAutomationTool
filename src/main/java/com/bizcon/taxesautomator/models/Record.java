@@ -11,6 +11,7 @@ public class Record {
     private SimpleStringProperty asanId;
     private SimpleBooleanProperty oxunmamis;
     private SimpleBooleanProperty makeReport;
+    private SimpleBooleanProperty detailsReport;
     private SimpleStringProperty baslangicTarixi;
     private SimpleStringProperty bitmeTarixi;
 
@@ -23,6 +24,7 @@ public class Record {
         this.baslangicTarixi = new SimpleStringProperty("");
         this.bitmeTarixi = new SimpleStringProperty("");
         this.makeReport = new SimpleBooleanProperty(false);
+        this.detailsReport = new SimpleBooleanProperty(false);
     }
 
     public Record(String voen, String searchStatus, String asanNomre, String asanId, Boolean oxunmamis, Boolean makeReport,
@@ -51,6 +53,14 @@ public class Record {
 
     public BooleanProperty getMakeReport() {
         return makeReport;
+    }
+
+    public BooleanProperty getDetailsReport() {
+        return detailsReport;
+    }
+
+    public void setDetailsReport(Boolean detailsReport) {
+        this.detailsReport.set(detailsReport);
     }
 
     // VOEN

@@ -18,18 +18,18 @@ public class LicenseController implements Initializable {
 
     @FXML private TextField licenseField;
     @FXML private Button checkButton;
-    @FXML private ImageView logoImage;
+//    @FXML private ImageView logoImage;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        Image image = new Image(Objects.requireNonNull(LicenseController.class.getResource("/images/vergi.png")).toExternalForm());
+//        Image image = new Image(Objects.requireNonNull(LicenseController.class.getResource("/images/vergi.png")).toExternalForm());
 
-        if (image != null) {
-            System.out.println("Image loaded successfully.");
-            logoImage.setImage(image);
-        } else {
-            System.out.println("Failed to load the image.");
-        }
+//        if (image != null) {
+//            System.out.println("Image loaded successfully.");
+//            logoImage.setImage(image);
+//        } else {
+//            System.out.println("Failed to load the image.");
+//        }
 
         checkButton.setOnMouseClicked(mouseEvent -> {
 

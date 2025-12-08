@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="DEBUG" monitorInterval="60">
     <Properties>
-        <Property name="LOG_DIR">${sys:java.io.tmpdir}/etaxes-logs</Property>
+        <Property name="LOG_DIR">${sys:user.home}/Library/Logs/etaxes</Property>
         <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] %c{1.}:%L - %m%n</Property>
     </Properties>
 

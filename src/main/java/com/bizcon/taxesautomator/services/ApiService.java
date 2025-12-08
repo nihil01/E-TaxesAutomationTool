@@ -5,6 +5,7 @@ import com.bizcon.taxesautomator.models.CertificateModel;
 import com.bizcon.taxesautomator.models.DocumentModel;
 import com.bizcon.taxesautomator.models.MessageDto;
 import com.bizcon.taxesautomator.utils.ApiUtils;
+import com.bizcon.taxesautomator.utils.CustomHttpHandler;
 import com.bizcon.taxesautomator.utils.MessageType;
 import com.bizcon.taxesautomator.utils.UiModifier;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,7 +22,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -481,7 +482,176 @@ public class ApiService implements ApiUtils {
         String body;
 
         if (msg == MessageType.INBOX){
-                body = """
+            body = """
+        {
+            "correspondent": {
+                "kind": "taxauthority",
+                "tin": null,
+                "taxAuthorityCode": null,
+                "name": null,
+                "fin": null
+            },
+            "offset": 0,
+            "maxCount": 100,
+            "containsText": "",
+            "categoryCodes": [],
+            "docGroups": null,
+            "unreadOnly": %s,
+            "registerNumber": null,
+            "withActionOnly": null,
+            "withAttachmentsOnly": null,
+            "startDate": "%s",
+            "endDate": "%s"
+        }""".formatted(!unread ? "null" : true, dateStart, dateEnd);
+
+        } else {
+            body = """
+        {
+            "correspondent": {
+                "kind": "taxauthority",
+                "tin": null,
+                "fin": null
+            },
+            "offset": 0,
+            "maxCount": 100,
+            "containsText": "",
+            "categoryCodes": [],
+            "docGroups": null,
+            "unreadOnly": %s,
+            "registerNumber": null,
+            "withActionOnly": null,
+            "withAttachmentsOnly": null,
+            "startDate": "%s",
+            "endDate": "%s"
+        }""".formatted(!unread ? "null" : true, dateStart, dateEnd);
+        }
+
+        LoggingService.logData("Request " + typePath + "...", MessageType.INFO);
+        LoggingService.logData(body, MessageType.INFO);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(endpoint)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(Duration.ofSeconds(15))
+                .header("Cookie", cookieValue)
+                .header("x-authorization", "Bearer " + jwtToken)
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0")
+                .build();
+
+        return client.sendAsync(request, new CustomHttpHandler<>(DocumentModel.class))
+                .thenCompose(response -> {
+
+                    LoggingService.logData("Messages response " + typePath + ": " + response.statusCode(), MessageType.INFO);
+
+                    final String nextCookie = response.headers().firstValue("Set-Cookie")
+                            .filter(s -> s.contains("JSESSIONID"))
+                            .map(s -> s.split(";")[0])
+                            .orElse(cookieValue);
+
+                    DocumentModel documentModel = response.body();
+
+                    if (documentModel == null || documentModel.getMessages() == null) {
+                        return CompletableFuture.completedFuture(nextCookie);
+                    }
+
+                    List<DocumentModel.Document> documentList = new ArrayList<>(documentModel.getMessages());
+
+                    // recursion download
+                    CompletableFuture<List<DocumentModel.Document>> allDocsFuture =
+                            documentModel.getHasMore()
+                                    ? fetchAllDocuments(jwtToken, nextCookie, endpoint.toString(), msg, dateStart, dateEnd, unread, 100, documentList)
+                                    : CompletableFuture.completedFuture(documentList);
+
+                    return allDocsFuture.thenCompose(list -> {
+
+                        LoggingService.logData("Messages count: " + list.size(), MessageType.INFO);
+
+                        if (list.isEmpty()) {
+                            return CompletableFuture.completedFuture(nextCookie);
+                        }
+
+                        CompletableFuture<String> chain = CompletableFuture.completedFuture(nextCookie);
+
+                        for (DocumentModel.Document doc : list) {
+                            chain = chain.thenCompose(curCookie ->
+                                    getFileInsideMessageAsync(
+                                            doc.getId(),
+                                            doc.getCreatedAt(),
+                                            curCookie,
+                                            jwtToken,
+                                            searchElement,
+                                            msg
+                                    ).thenApply(updatedCookie ->
+                                            (updatedCookie != null && !updatedCookie.isBlank())
+                                                    ? updatedCookie
+                                                    : curCookie
+                                    )
+                            );
+                        }
+
+                        return chain;
+                    });
+                })
+                .exceptionally(ex -> {
+                    LoggingService.logData(ex.getMessage(), MessageType.ERROR);
+                    throw new CompletionException(ex);
+                });
+    }
+
+
+    private CompletableFuture<List<DocumentModel.Document>> fetchAllDocuments(
+            String token,
+            String cookie,
+            String endpoint,
+            MessageType msg,
+            String dateStart,
+            String dateEnd,
+            boolean unread,
+            int offset,
+            List<DocumentModel.Document> acc
+    ) {
+        return getExtraDocuments(token, cookie, endpoint, msg, dateStart, dateEnd, unread, offset)
+            .thenCompose(extra -> {
+
+                if (extra == null || extra.isEmpty()) {
+                    return CompletableFuture.completedFuture(acc);
+                }
+
+                Map.Entry<String, DocumentModel.Document[]> entry =
+                        extra.entrySet().iterator().next();
+
+                String nextCookie = entry.getKey();
+                DocumentModel.Document[] docs = entry.getValue();
+
+                acc.addAll(List.of(docs));
+
+                return fetchAllDocuments(
+                    token,
+                    nextCookie,
+                    endpoint,
+                    msg,
+                    dateStart,
+                    dateEnd,
+                    unread,
+                    offset + 100,
+                    acc
+                );
+            });
+    }
+
+
+    private CompletableFuture<Map<String, DocumentModel.Document[]>> getExtraDocuments(String token, String cookie,
+                                                                           String endpoint, MessageType msg,
+                                                                           String dateStart, String dateEnd,
+                                                                           boolean unread, int count){
+
+        LoggingService.logData("Request extra documents ...", MessageType.INFO);
+
+        String body;
+
+        if (msg == MessageType.INBOX){
+            body = """
             {
                 "correspondent": {
                     "kind": "taxauthority",
@@ -490,7 +660,7 @@ public class ApiService implements ApiUtils {
                     "name": null,
                     "fin": null
                 },
-                "offset": 0,
+                "offset": %d,
                 "maxCount": 100,
                 "containsText": "",
                 "categoryCodes": [],
@@ -501,18 +671,19 @@ public class ApiService implements ApiUtils {
                 "withAttachmentsOnly": null,
                 "startDate": "%s",
                 "endDate": "%s"
-        }""".formatted(!unread ? "null" : true, dateStart, dateEnd);
+        }""".formatted(count, !unread ? "null" : true, dateStart, dateEnd);
+
 
         }else{
 
-                body = """
+            body = """
             {
                 "correspondent": {
                     "kind": "taxauthority",
                     "tin": null,
                     "fin": null
                 },
-                "offset": 0,
+                "offset": %d,
                 "maxCount": 100,
                 "containsText": "",
                 "categoryCodes": [],
@@ -523,72 +694,39 @@ public class ApiService implements ApiUtils {
                 "withAttachmentsOnly": null,
                 "startDate": "%s",
                 "endDate": "%s"
-            }""".formatted(!unread ? "null" : true, dateStart, dateEnd);
+            }""".formatted(count, !unread ? "null" : true, dateStart, dateEnd);
         }
 
-        LoggingService.logData("Request " + typePath + " ...", MessageType.INFO);
-        LoggingService.logData(body, MessageType.INFO);
-
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(endpoint)
+            .uri(URI.create(endpoint))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .timeout(Duration.ofSeconds(15))
-            .header("Cookie", cookieValue)
-            .header("x-authorization", "Bearer " + jwtToken)
+            .header("Cookie", cookie)
+            .header("x-authorization", "Bearer " + token)
             .header("Content-Type", "application/json")
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
             .build();
 
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenCompose(response -> {
-                    LoggingService.logData("Messages response " + typePath + ": " + response.statusCode(), MessageType.INFO);
-                    if (response.statusCode() != 200) {
-                        return CompletableFuture.failedFuture(new IllegalStateException("HTTP " + response.statusCode() + " for " + typePath));
-                    }
+        return client.sendAsync(request, new CustomHttpHandler<>(DocumentModel.class)).thenCompose(response -> {
 
-                    // Подхватываем обновлённую куку; если нет — используем входящую
-                    String nextCookie = response.headers().firstValue("Set-Cookie")
-                            .filter(s -> s.contains("JSESSIONID"))
-                            .map(s -> s.split(";")[0])
-                            .orElse(cookieValue);
 
-                    ObjectMapper mapper = new ObjectMapper();
-                    final DocumentModel documentModel;
-                    try {
-                        documentModel = mapper.readValue(response.body(), DocumentModel.class);
-                    } catch (JsonProcessingException e) {
-                        return CompletableFuture.failedFuture(e);
-                    }
+            DocumentModel dm = response.body();
+            String nextCookie = response.headers().firstValue("Set-Cookie")
+                    .filter(s -> s.contains("JSESSIONID"))
+                    .map(s -> s.split(";")[0])
+                    .orElse("");
 
-                    LoggingService.logData("Messages count: " +
-                            (documentModel.getMessages() == null ? 0 : documentModel.getMessages().size())
-                    , MessageType.INFO);
+            if (dm != null && !dm.getMessages().isEmpty()){
 
-                    LoggingService.logData("Messages", MessageType.INFO);
-                    LoggingService.logData(documentModel.getMessages().toString(), MessageType.INFO);
+                return CompletableFuture.completedFuture(Map.of(nextCookie, dm.getMessages()
+                        .toArray(DocumentModel.Document[]::new)));
 
-                    // Если сообщений нет — возвращаем текущую (возможно обновлённую) куку
-                    if (documentModel.getMessages() == null || documentModel.getMessages().isEmpty()) {
-                        return CompletableFuture.completedFuture(nextCookie);
-                    }
+            }
 
-                    // Последовательная цепочка: каждый message может вернуть новую куку
-                    CompletableFuture<String> chain = CompletableFuture.completedFuture(nextCookie);
-                    for (DocumentModel.Document doc : documentModel.getMessages()) {
-                        chain = chain.thenCompose(curCookie ->
-                            getFileInsideMessageAsync(doc.getId(), doc.getCreatedAt(),curCookie, jwtToken, searchElement, msg)
-                                .thenApply(updatedCookie -> {
-                                    // fallback на текущую куку, если метод вернул пустую
-                                    return (updatedCookie != null && !updatedCookie.isBlank()) ? updatedCookie : curCookie;
-                                })
-                        );
-                    }
-                    return chain;
-                })
-                .exceptionally(ex -> {
-                    LoggingService.logData(ex.getMessage(), MessageType.ERROR);
-                    throw new java.util.concurrent.CompletionException(ex);
-                });
+            return CompletableFuture.completedFuture(null);
+
+        });
+
     }
 
     //6
@@ -636,18 +774,22 @@ public class ApiService implements ApiUtils {
                     LoggingService.logData("Data i found inside message", MessageType.INFO);
                     LoggingService.logData(dto.toString(), MessageType.INFO);
 
-                    for (MessageDto.FileDto file: dto.getFiles()) {
-                        String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-                        String rawName = (dto.getFiles().size() == 1)
-                                ? (filePart + "." + ext)
-                                : (filePart + UUID.randomUUID() + "." + ext);
+                    if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
 
-                        String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
+                        for (MessageDto.FileDto file: dto.getFiles()) {
+                            String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+                            String rawName = (dto.getFiles().size() == 1)
+                                    ? (filePart + "." + ext)
+                                    : (filePart + UUID.randomUUID() + "." + ext);
 
-                        LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
+                            String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
 
-                        fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
-                                jwtToken, searchElement, msg));
+                            LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
+
+                            fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
+                                    jwtToken, searchElement, msg));
+                        }
+
                     }
 
                 } catch (JsonProcessingException e) {
@@ -778,8 +920,10 @@ public class ApiService implements ApiUtils {
                     LoggingService.logData("File downloaded successfully to: " + filePath, MessageType.INFO);
                     promise.complete(null);
                 } else {
-                    promise.completeExceptionally(new IllegalStateException("File download failed: " + fileResponse.statusCode()));
+                    LoggingService.logData("File download failed: " + fileResponse.statusCode(), MessageType.ERROR);
                 }
+
+                promise.complete(null);
             })
             .exceptionally(ex -> {
                 promise.completeExceptionally(ex);

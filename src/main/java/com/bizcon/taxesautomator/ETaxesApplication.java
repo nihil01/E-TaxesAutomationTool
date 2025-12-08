@@ -17,10 +17,10 @@ public class ETaxesApplication extends Application {
     @Override
 public void start(Stage stage) throws IOException {
         Scene scene;
-        System.out.println(getClass().getResource("/images/vergi.png"));
-        Image icon = new Image(getClass().getResource("/images/vergi.png").toExternalForm());
+//        System.out.println(getClass().getResource("/images/vergi.png"));
+//        Image icon = new Image(getClass().getResource("/images/vergi.png").toExternalForm());
 
-        stage.getIcons().add(icon);
+//        stage.getIcons().add(icon);
         stage.setTitle("E-TaxesAutoTool");
         stage.setResizable(true);
 

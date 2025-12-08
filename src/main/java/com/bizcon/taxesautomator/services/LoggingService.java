@@ -6,7 +6,7 @@ import org.apache.logging.log4j.Logger;
 
 public class LoggingService {
 
-    private static Logger logger = LogManager.getLogger(LoggingService.class);
+    private static final Logger logger = LogManager.getLogger(LoggingService.class);
 
     public static void logData(String message, MessageType logType) {
         switch (logType){

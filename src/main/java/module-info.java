@@ -20,6 +20,7 @@ module com.bizcon.taxesautomator {
     requires com.google.auth;
     requires com.github.oshi;
     requires org.apache.poi.ooxml;
+    requires org.apache.logging.log4j;
 
     opens com.bizcon.taxesautomator to javafx.fxml;
     exports com.bizcon.taxesautomator;
