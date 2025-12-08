@@ -79,6 +79,7 @@ public class MainController extends ApiService implements Initializable, UiModif
     public void initialize(URL url, ResourceBundle resourceBundle) {
         LoggingService.logData("Application started!", MessageType.INFO);
         this.uiModifier = this;
+
         try {
             checkPreferences();
         } catch (IOException e) {

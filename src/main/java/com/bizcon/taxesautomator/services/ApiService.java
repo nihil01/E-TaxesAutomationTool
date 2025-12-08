@@ -21,8 +21,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,6 +39,7 @@ public class ApiService implements ApiUtils {
     private AtomicInteger COMPLETED_RECORDS_COUNT = new AtomicInteger(0);
 
     private final HashSet<String> asanIDs = new HashSet<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     protected UiModifier uiModifier;
 
@@ -66,6 +66,12 @@ public class ApiService implements ApiUtils {
             LoggingService.logData("Operation finished!", MessageType.INFO);
             
         }
+    }
+
+    private CompletableFuture<Void> explicitWait() {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        scheduler.schedule(() -> future.complete(null), ((int)(Math.random() * 200) + 100), TimeUnit.MILLISECONDS);
+        return future;
     }
 
     protected void getRequestStatus(
@@ -289,7 +295,6 @@ public class ApiService implements ApiUtils {
                                         " (FIN: " + cert.getIndividualInfo().getFin() + ")", MessageType.INFO);
                             }
                             if (cert.getLegalInfo() != null) {
-                                LoggingService.logData("Here is legal info bro i need it", MessageType.INFO);
                                 LoggingService.logData("Legal: " + cert.getLegalInfo().getName() +
                                         " (TIN: " + cert.getLegalInfo().getTin() + ")", MessageType.INFO);
                             }
@@ -707,8 +712,10 @@ public class ApiService implements ApiUtils {
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
             .build();
 
-        return client.sendAsync(request, new CustomHttpHandler<>(DocumentModel.class)).thenCompose(response -> {
+        return client.sendAsync(request, new CustomHttpHandler<>(DocumentModel.class))
 
+            .thenCompose(x -> explicitWait().thenApply(v -> x))
+            .thenCompose(response -> {
 
             DocumentModel dm = response.body();
             String nextCookie = response.headers().firstValue("Set-Cookie")
@@ -743,9 +750,9 @@ public class ApiService implements ApiUtils {
                 .build();
 
         CompletableFuture<String> promise = new CompletableFuture<>();
-        ObjectMapper mapper = new ObjectMapper();
 
-        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        client.sendAsync(request, new CustomHttpHandler<>(MessageDto.class))
+            .thenCompose(x -> explicitWait().thenApply(v -> x))
             .thenAccept(response -> {
                 if (response.statusCode() != 200) {
                     promise.completeExceptionally
@@ -761,41 +768,36 @@ public class ApiService implements ApiUtils {
                         .orElse(cookieValue);
 
                 List<CompletableFuture<Void>> fileTasks = new ArrayList<>();
-                try {
-                    MessageDto dto = mapper.readValue(response.body(), MessageDto.class);
-                    String fileTimestamp = normalizeDate(inboxCreatedAt);
+                MessageDto dto = response.body();
+                String fileTimestamp = normalizeDate(inboxCreatedAt);
 
-                    LoggingService.logData("File timestamp " + fileTimestamp, MessageType.INFO);
+                LoggingService.logData("File timestamp " + fileTimestamp, MessageType.INFO);
 
-                    String filePart = dto.getSubject() != null ? dto.getSubject() : dto.getContent();
+                String filePart = dto.getSubject() != null ? dto.getSubject() : dto.getContent();
 
-                    LoggingService.logData("File Part " + filePart, MessageType.INFO);
+                LoggingService.logData("File Part " + filePart, MessageType.INFO);
 
-                    LoggingService.logData("Data i found inside message", MessageType.INFO);
-                    LoggingService.logData(dto.toString(), MessageType.INFO);
+                LoggingService.logData("Data i found inside message", MessageType.INFO);
+                LoggingService.logData(dto.toString(), MessageType.INFO);
 
-                    if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
+                if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
 
-                        for (MessageDto.FileDto file: dto.getFiles()) {
-                            String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
-                            String rawName = (dto.getFiles().size() == 1)
-                                    ? (filePart + "." + ext)
-                                    : (filePart + UUID.randomUUID() + "." + ext);
+                    for (MessageDto.FileDto file: dto.getFiles()) {
+                        String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+                        String rawName = (dto.getFiles().size() == 1)
+                                ? (filePart + "." + ext)
+                                : (filePart + UUID.randomUUID() + "." + ext);
 
-                            String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
+                        String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
 
-                            LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
+                        LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
 
-                            fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
-                                    jwtToken, searchElement, msg));
-                        }
-
+                        fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
+                                jwtToken, searchElement, msg));
                     }
 
-                } catch (JsonProcessingException e) {
-                    LoggingService.logData(e.getMessage(), MessageType.ERROR);
-                    throw new RuntimeException(e);
                 }
+
                 CompletableFuture.allOf(fileTasks.toArray(new CompletableFuture[0]))
                         .whenComplete((v, ex) -> {
                             if (ex == null) promise.complete(newCookie);
