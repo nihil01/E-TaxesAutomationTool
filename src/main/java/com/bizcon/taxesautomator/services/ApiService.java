@@ -10,6 +10,7 @@ import com.bizcon.taxesautomator.utils.MessageType;
 import com.bizcon.taxesautomator.utils.UiModifier;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.java.Log;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -82,7 +83,7 @@ public class ApiService implements ApiUtils {
         final int MAX_RETRIES = 18;
         final int[] retryCount = { 0 };
         final boolean[] firstRequestTriggered = {false};
-        AtomicReference<String> cookieValue = new AtomicReference<>();
+        AtomicReference<String> cookieValue = new AtomicReference<>("");
 
         HttpRequest browserHistoryRequest = HttpRequest.newBuilder()
             .uri(new URI("https://new.e-taxes.gov.az/api/po/log/public/v1/activity"))
@@ -163,21 +164,33 @@ public class ApiService implements ApiUtils {
                     try {
                         LoggingService.logData(response.body(), MessageType.INFO);
                         LoggingService.logData("REQUEST SUCCESSFUL! OBTAINING CERTIFICATES ...", MessageType.INFO);
-                        getCertificates(cookieValue.get(), token, asanID, searchElement,
+                        getCertificates(token, asanID, searchElement,
                                 dateStart, dateEnd, unread, makeReport, detailReport);
+
+
+
                     } catch (URISyntaxException e) {
                         uiModifier.markAsFailed(asanID);
                         FAILED_RECORDS_COUNT.incrementAndGet();
                         PROCESSED_RECORDS.incrementAndGet();
+
+                        LoggingService.logData("Runtime error! " + e.getMessage(), MessageType.ERROR);
+
                         checkProcessingCompletion();
-                        throw new RuntimeException(e);
+                        LoggingService.logData(e.getMessage(), MessageType.ERROR);
                     }
                 }
 
-                cookieValue.set(response.headers()
-                    .firstValue("Set-Cookie")
-                    .map(value -> value.split(";")[0])
-                    .orElse(null));
+//                String cookie = response.headers()
+//                        .firstValue("Set-Cookie")
+//                        .map(v -> v.split(";")[0])
+//                        .orElse(null);
+//
+//                if (cookie == null) {
+//                    throw new IllegalStateException("Set-Cookie header is missing");
+//                }
+//
+//                cookieValue.set(cookie);
             })
             .exceptionally(ex -> {
                 LoggingService.logData(ex.getMessage(), MessageType.ERROR);
@@ -185,6 +198,7 @@ public class ApiService implements ApiUtils {
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
                 checkProcessingCompletion();
+                LoggingService.logData("Runtime error2! " + ex.getMessage(), MessageType.ERROR);
                 return null;
             });
     }
@@ -256,7 +270,7 @@ public class ApiService implements ApiUtils {
     }
 
     //3
-    protected void getCertificates(String cookieValue, String token,
+    protected void getCertificates(String token,
                                    String asanID, String searchElement, String dateStart, String dateEnd,
                                    boolean unread, boolean makeReport, boolean detailReport) throws URISyntaxException {
         URI endpoint = new URI(BASE_URL + "/auth/public/v1/asanImza/certificates");
@@ -265,7 +279,6 @@ public class ApiService implements ApiUtils {
             .GET()
             .uri(endpoint)
             .header("x-authorization", "Bearer " + token)
-            .header("JSESSIONID", cookieValue)
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
             .build();
 
@@ -309,29 +322,20 @@ public class ApiService implements ApiUtils {
                                 LoggingService.logData("Trying to choose a tax payer based on SEARCH_ELEMENT", MessageType.INFO);
                                 LoggingService.logData(searchElement, MessageType.INFO);
 
-                                response.headers()
-                                    .firstValue("Set-Cookie")
-                                    .ifPresentOrElse(s -> {
-                                        if (s.contains("JSESSIONID")){
-                                            LoggingService.logData("Cookie value: " + s, MessageType.INFO);
-                                            try {
-                                                chooseTaxPayer(cert.getLegalInfo().getTin(), cookieValue, token,
-                                                        asanID, searchElement, dateStart, dateEnd, unread, makeReport,
-                                                        detailReport);
-                                            } catch (URISyntaxException e) {
-                                                LoggingService.logData(e.getMessage(), MessageType.ERROR);
-                                                uiModifier.markAsFailed(asanID);
-                                                FAILED_RECORDS_COUNT.incrementAndGet();
-                                                PROCESSED_RECORDS.incrementAndGet();
-                                                checkProcessingCompletion();;
-                                            }
-                                        }else{
-                                            LoggingService.logData("Cookie containing JSESSIONID not found!",
-                                                    MessageType.WARN);
-                                        }
-                                    }, () -> {
-                                        LoggingService.logData("Cookies not found !!", MessageType.WARN);
-                                    });
+
+                                try {
+                                    chooseTaxPayer(cert.getLegalInfo().getTin(), token,
+                                            asanID, searchElement, dateStart, dateEnd, unread, makeReport,
+                                            detailReport);
+                                } catch (URISyntaxException e) {
+                                    LoggingService.logData(e.getMessage(), MessageType.ERROR);
+                                    uiModifier.markAsFailed(asanID);
+                                    FAILED_RECORDS_COUNT.incrementAndGet();
+                                    PROCESSED_RECORDS.incrementAndGet();
+                                    checkProcessingCompletion();;
+                                }
+
+
                             }
                         }
 
@@ -349,6 +353,7 @@ public class ApiService implements ApiUtils {
                         FAILED_RECORDS_COUNT.incrementAndGet();
                         PROCESSED_RECORDS.incrementAndGet();
                         checkProcessingCompletion();
+                        LoggingService.logData("Could not parse certificates! " + e.getMessage(), MessageType.ERROR);
                     }
                 }
             })
@@ -358,19 +363,22 @@ public class ApiService implements ApiUtils {
                 FAILED_RECORDS_COUNT.incrementAndGet();
                 PROCESSED_RECORDS.incrementAndGet();
                 checkProcessingCompletion();
+
+                LoggingService.logData("Bad response !", MessageType.ERROR);
+                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
+
                 return null;
             });
     }
     //4
     protected void chooseTaxPayer(
-            String tin, String cookieValue, String token, String asanID,
+            String tin, String token, String asanID,
             String searchElement, String dateStart, String dateEnd,
             boolean unread, boolean makeReport, boolean detailReport
     ) throws URISyntaxException {
         URI endpoint = new URI(BASE_URL + "/auth/public/v1/asanImza/chooseTaxpayer");
 
         LoggingService.logData("Token when choosing taxpayer ...", MessageType.INFO);
-        LoggingService.logData("Cookie when choosing taxpayer ..." + cookieValue, MessageType.INFO);
         LoggingService.logData("TIN " + tin, MessageType.INFO);
 
         String body = String.format("{\"ownerType\":\"legal\",\"legalTin\":\"%s\"}", tin);
@@ -378,7 +386,6 @@ public class ApiService implements ApiUtils {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(endpoint)
             .POST(HttpRequest.BodyPublishers.ofString(body))
-            .header("Cookie", cookieValue)
             .header("x-authorization", "Bearer " + token)
             .header("Content-Type", "application/json")
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
@@ -392,16 +399,16 @@ public class ApiService implements ApiUtils {
                 LoggingService.logData("Response headers: " + response.headers(), MessageType.INFO);
 
                 if (response.statusCode() == 200) {
-                    AtomicReference<String> cookie = new AtomicReference<>();
+//                    AtomicReference<String> cookie = new AtomicReference<>();
                     AtomicReference<String> xAuth = new AtomicReference<>();
 
                     response.headers().map().forEach((key, values) -> {
-                        if (key.equalsIgnoreCase("set-cookie")) {
-                            values.stream()
-                                .filter(s -> s.contains("JSESSIONID"))
-                                .findFirst()
-                                .ifPresent(s -> cookie.set(s.split(";")[0]));
-                        }
+//                        if (key.equalsIgnoreCase("set-cookie")) {
+//                            values.stream()
+//                                .filter(s -> s.contains("JSESSIONID"))
+//                                .findFirst()
+//                                .ifPresent(s -> cookie.set(s.split(";")[0]));
+//                        }
                         if (key.equalsIgnoreCase("x-authorization")) {
                             values.stream()
                                 .findFirst()
@@ -409,26 +416,26 @@ public class ApiService implements ApiUtils {
                         }
                     });
 
-                    if (cookie.get() != null && xAuth.get() != null) {
+                    if (xAuth.get() != null) {
                         LoggingService.logData("Chose tax payer successfully!", MessageType.INFO);
                         //Firstly, get reports for the taxpayer
-                        CompletableFuture<String> afterReports = makeReport
-                            ? downloadAndSaveReportAsync(xAuth.get(), cookie.get(), searchElement, detailReport, MessageType.PDF)
-                            .thenCompose(c1 -> downloadAndSaveReportAsync(xAuth.get(), c1, searchElement, detailReport, MessageType.EXCEL))
-                            .thenCompose(c2 -> downloadAndSaveReportAsync(xAuth.get(), c2, searchElement, detailReport, MessageType.HTML))
-                            : CompletableFuture.completedFuture(cookie.get());
+                        CompletableFuture<Boolean> afterReports = makeReport
+                            ? downloadAndSaveReportAsync(xAuth.get(), searchElement, detailReport, MessageType.PDF)
+                            .thenCompose(b -> downloadAndSaveReportAsync(xAuth.get(), searchElement, detailReport, MessageType.EXCEL))
+                            .thenCompose(b2 -> downloadAndSaveReportAsync(xAuth.get(), searchElement, detailReport, MessageType.HTML))
+                            : CompletableFuture.completedFuture(true);
 
                         CompletableFuture<Void> allWork = afterReports
                             .thenCompose(c -> {
                                 try {
-                                    return getMessages(c, xAuth.get(), searchElement, dateStart, dateEnd, unread, MessageType.INBOX);
+                                    return getMessages(xAuth.get(), searchElement, dateStart, dateEnd, unread, MessageType.INBOX);
                                 } catch (URISyntaxException e) {
                                     return CompletableFuture.failedFuture(e);
                                 }
                             })
                             .thenCompose(c2 -> {
                                 try {
-                                    return getMessages(c2, xAuth.get(), searchElement, dateStart, dateEnd, unread, MessageType.OUTBOX);
+                                    return getMessages(xAuth.get(), searchElement, dateStart, dateEnd, unread, MessageType.OUTBOX);
                                 } catch (URISyntaxException e) {
                                     return CompletableFuture.failedFuture(e);
                                 }
@@ -477,8 +484,8 @@ public class ApiService implements ApiUtils {
     //https://new.e-taxes.gov.az/api/po/edi/public/v1/message/find.inbox
     //https://new.e-taxes.gov.az/api/po/edi/public/v1/message/find.outbox
     //5
-    protected CompletableFuture<String> getMessages(
-            String cookieValue, String jwtToken, String searchElement,
+    protected CompletableFuture<Boolean> getMessages(
+            String jwtToken, String searchElement,
             String dateStart, String dateEnd, boolean unread, MessageType msg
     ) throws URISyntaxException {
 
@@ -538,7 +545,6 @@ public class ApiService implements ApiUtils {
                 .uri(endpoint)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .timeout(Duration.ofSeconds(15))
-                .header("Cookie", cookieValue)
                 .header("x-authorization", "Bearer " + jwtToken)
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "Mozilla/5.0")
@@ -549,15 +555,10 @@ public class ApiService implements ApiUtils {
 
                     LoggingService.logData("Messages response " + typePath + ": " + response.statusCode(), MessageType.INFO);
 
-                    final String nextCookie = response.headers().firstValue("Set-Cookie")
-                            .filter(s -> s.contains("JSESSIONID"))
-                            .map(s -> s.split(";")[0])
-                            .orElse(cookieValue);
-
                     DocumentModel documentModel = response.body();
 
                     if (documentModel == null || documentModel.getMessages() == null) {
-                        return CompletableFuture.completedFuture(nextCookie);
+                        return CompletableFuture.completedFuture(false);
                     }
 
                     List<DocumentModel.Document> documentList = new ArrayList<>(documentModel.getMessages());
@@ -565,7 +566,7 @@ public class ApiService implements ApiUtils {
                     // recursion download
                     CompletableFuture<List<DocumentModel.Document>> allDocsFuture =
                             documentModel.getHasMore()
-                                    ? fetchAllDocuments(jwtToken, nextCookie, endpoint.toString(), msg, dateStart, dateEnd, unread, 100, documentList)
+                                    ? fetchAllDocuments(jwtToken, endpoint.toString(), msg, dateStart, dateEnd, unread, 100, documentList)
                                     : CompletableFuture.completedFuture(documentList);
 
                     return allDocsFuture.thenCompose(list -> {
@@ -573,24 +574,19 @@ public class ApiService implements ApiUtils {
                         LoggingService.logData("Messages count: " + list.size(), MessageType.INFO);
 
                         if (list.isEmpty()) {
-                            return CompletableFuture.completedFuture(nextCookie);
+                            return CompletableFuture.completedFuture(false);
                         }
 
-                        CompletableFuture<String> chain = CompletableFuture.completedFuture(nextCookie);
+                        CompletableFuture<Boolean> chain = CompletableFuture.completedFuture(true);
 
                         for (DocumentModel.Document doc : list) {
                             chain = chain.thenCompose(curCookie ->
                                     getFileInsideMessageAsync(
                                             doc.getId(),
                                             doc.getCreatedAt(),
-                                            curCookie,
                                             jwtToken,
                                             searchElement,
                                             msg
-                                    ).thenApply(updatedCookie ->
-                                            (updatedCookie != null && !updatedCookie.isBlank())
-                                                    ? updatedCookie
-                                                    : curCookie
                                     )
                             );
                         }
@@ -607,7 +603,6 @@ public class ApiService implements ApiUtils {
 
     private CompletableFuture<List<DocumentModel.Document>> fetchAllDocuments(
             String token,
-            String cookie,
             String endpoint,
             MessageType msg,
             String dateStart,
@@ -616,7 +611,7 @@ public class ApiService implements ApiUtils {
             int offset,
             List<DocumentModel.Document> acc
     ) {
-        return getExtraDocuments(token, cookie, endpoint, msg, dateStart, dateEnd, unread, offset)
+        return getExtraDocuments(token, endpoint, msg, dateStart, dateEnd, unread, offset)
             .thenCompose(extra -> {
 
                 if (extra == null || extra.isEmpty()) {
@@ -633,7 +628,6 @@ public class ApiService implements ApiUtils {
 
                 return fetchAllDocuments(
                     token,
-                    nextCookie,
                     endpoint,
                     msg,
                     dateStart,
@@ -646,7 +640,7 @@ public class ApiService implements ApiUtils {
     }
 
 
-    private CompletableFuture<Map<String, DocumentModel.Document[]>> getExtraDocuments(String token, String cookie,
+    private CompletableFuture<Map<String, DocumentModel.Document[]>> getExtraDocuments(String token,
                                                                            String endpoint, MessageType msg,
                                                                            String dateStart, String dateEnd,
                                                                            boolean unread, int count){
@@ -706,7 +700,6 @@ public class ApiService implements ApiUtils {
             .uri(URI.create(endpoint))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .timeout(Duration.ofSeconds(15))
-            .header("Cookie", cookie)
             .header("x-authorization", "Bearer " + token)
             .header("Content-Type", "application/json")
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
@@ -737,19 +730,18 @@ public class ApiService implements ApiUtils {
     }
 
     //6
-    private CompletableFuture<String> getFileInsideMessageAsync(
-            String inboxID, String inboxCreatedAt, String cookieValue, String jwtToken, String searchElement, MessageType msg) {
+    private CompletableFuture<Boolean> getFileInsideMessageAsync(
+            String inboxID, String inboxCreatedAt, String jwtToken, String searchElement, MessageType msg) {
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/edi/public/v1/message/%s?sourceSystem=avis".formatted(inboxID)))
                 .GET()
                 .timeout(Duration.ofSeconds(15))
-                .header("Cookie", cookieValue)
                 .header("x-authorization", "Bearer " + jwtToken)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
                 .build();
 
-        CompletableFuture<String> promise = new CompletableFuture<>();
+        CompletableFuture<Boolean> promise = new CompletableFuture<>();
 
         client.sendAsync(request, new CustomHttpHandler<>(MessageDto.class))
             .thenCompose(x -> explicitWait().thenApply(v -> x))
@@ -761,11 +753,6 @@ public class ApiService implements ApiUtils {
                         );
                     return;
                 }
-
-                String newCookie = response.headers().firstValue("Set-Cookie")
-                        .filter(s -> s.contains("JSESSIONID"))
-                        .map(s -> s.split(";")[0])
-                        .orElse(cookieValue);
 
                 List<CompletableFuture<Void>> fileTasks = new ArrayList<>();
                 MessageDto dto = response.body();
@@ -800,7 +787,7 @@ public class ApiService implements ApiUtils {
 
                 CompletableFuture.allOf(fileTasks.toArray(new CompletableFuture[0]))
                         .whenComplete((v, ex) -> {
-                            if (ex == null) promise.complete(newCookie);
+                            if (ex == null) promise.complete(true);
                             else promise.completeExceptionally(ex);
                         });
             })
@@ -813,9 +800,8 @@ public class ApiService implements ApiUtils {
         return promise;
     }
 
-    private CompletableFuture<String> downloadAndSaveReportAsync(
-            String jwtToken, String cookieValue,
-            String searchElement, boolean details, MessageType msg) {
+    private CompletableFuture<Boolean> downloadAndSaveReportAsync(
+            String jwtToken, String searchElement, boolean details, MessageType msg) {
 
         LocalDate now = LocalDate.now();
         String startDate = String.format("%04d/%02d/%02d", now.getYear(), 1, 1);
@@ -848,7 +834,6 @@ public class ApiService implements ApiUtils {
                 .uri(URI.create(url))
                 .timeout(Duration.ofMinutes(1))
                 .header("x-authorization", "Bearer " + jwtToken)
-                .header("Cookie", cookieValue)
                 .header("Accept", (msg == MessageType.PDF) ? "application/pdf"
                         : (msg == MessageType.EXCEL ? "application/vnd.ms-excel" : "text/html"))
                 .header("Accept-Encoding", "gzip, deflate, br")
@@ -866,16 +851,12 @@ public class ApiService implements ApiUtils {
                 }
                 LoggingService.logData("Report downloaded successfully to: " + filePath, MessageType.INFO);
 
-                return fileResponse.headers().allValues("Set-Cookie").stream()
-                    .filter(s -> s.contains("JSESSIONID"))
-                    .map(s -> s.split(";")[0])
-                    .findFirst()
-                    .orElse(cookieValue);
-
+                return true;
             })
             .exceptionally(ex -> {
                 LoggingService.logData(ex.getMessage(), MessageType.ERROR);
-                throw new java.util.concurrent.CompletionException(ex);
+
+                return false;
             });
     }
 

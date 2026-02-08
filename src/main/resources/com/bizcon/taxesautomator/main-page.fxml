@@ -57,7 +57,7 @@
                                         </children>
                                     </HBox>
 
-                                    <Label alignment="CENTER" cache="true" lineSpacing="1.0" prefHeight="17.0" prefWidth="585.0" text="VERSIYA 1.1 | Dekabr 2025" underline="true">
+                                    <Label alignment="CENTER" cache="true" lineSpacing="1.0" prefHeight="17.0" prefWidth="585.0" text="VERSIYA 1.2 | Fevral 2026" underline="true">
                                         <font>
                                             <Font name="Arial" size="9.0" />
                                         </font>
