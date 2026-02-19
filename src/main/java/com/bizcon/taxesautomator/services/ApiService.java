@@ -8,9 +8,7 @@ import com.bizcon.taxesautomator.utils.ApiUtils;
 import com.bizcon.taxesautomator.utils.CustomHttpHandler;
 import com.bizcon.taxesautomator.utils.MessageType;
 import com.bizcon.taxesautomator.utils.UiModifier;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.java.Log;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -32,12 +30,12 @@ public class ApiService implements ApiUtils {
     private final HttpClient client;
     private final String BASE_URL = "https://new.e-taxes.gov.az/api/po";
     private final Preferences prefs = Preferences.userNodeForPackage(MainController.class);
-    private AtomicInteger PROCESSED_RECORDS = new AtomicInteger(0);
-    private AtomicInteger TOTAL_RECORDS_COUNT = new AtomicInteger(0);
-    private AtomicBoolean isCompletionNotified = new AtomicBoolean(false);
+    private final AtomicInteger PROCESSED_RECORDS = new AtomicInteger(0);
+    private final AtomicInteger TOTAL_RECORDS_COUNT = new AtomicInteger(0);
+    private final AtomicBoolean isCompletionNotified = new AtomicBoolean(false);
 
-    private AtomicInteger FAILED_RECORDS_COUNT = new AtomicInteger(0);
-    private AtomicInteger COMPLETED_RECORDS_COUNT = new AtomicInteger(0);
+    private final AtomicInteger FAILED_RECORDS_COUNT = new AtomicInteger(0);
+    private final AtomicInteger COMPLETED_RECORDS_COUNT = new AtomicInteger(0);
 
     private final HashSet<String> asanIDs = new HashSet<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -780,7 +778,7 @@ public class ApiService implements ApiUtils {
                         LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
 
                         fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
-                                jwtToken, searchElement, msg));
+                                jwtToken, searchElement, msg, filePart));
                     }
 
                 }
@@ -861,12 +859,14 @@ public class ApiService implements ApiUtils {
     }
 
     private CompletableFuture<Void> downloadAndSaveDocumentAsync(
-            String documentID, String fileName, String jwtToken, String searchElement, MessageType msg) {
+            String documentID, String fileName, String jwtToken, String searchElement,
+            MessageType msg, String dirName) {
 
         CompletableFuture<Void> promise = new CompletableFuture<>();
         LoggingService.logData("Downloading file with fileName " + fileName, MessageType.INFO);
         LoggingService.logData("Document ID " + documentID, MessageType.INFO);
         String savePath = prefs.get("folderSavePath", null);
+
         if (savePath == null){
             promise.completeExceptionally(new IllegalStateException("Upload path is null"));
             return promise;
@@ -880,8 +880,10 @@ public class ApiService implements ApiUtils {
         }
 
         Path messageTypePath = createUploadDir(dirPath.toString(), msg == MessageType.INBOX ? "daxil_olanlar" : "gonderilenler");
+        Path finalPath = createUploadDir(messageTypePath.toString(), dirName);
 
-        Path filePath = messageTypePath.resolve(fileName);
+        Path filePath = finalPath.resolve(fileName);
+
         LoggingService.logData("Path to save a file", MessageType.INFO);
         LoggingService.logData(String.valueOf(filePath), MessageType.INFO);
 
@@ -898,20 +900,25 @@ public class ApiService implements ApiUtils {
         client.sendAsync(fileReq, HttpResponse.BodyHandlers.ofFile(
                     filePath, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
                 )
-            .thenAccept(fileResponse -> {
-                if (fileResponse.statusCode() == 200) {
-                    LoggingService.logData("File downloaded successfully to: " + filePath, MessageType.INFO);
-                    promise.complete(null);
-                } else {
-                    LoggingService.logData("File download failed: " + fileResponse.statusCode(), MessageType.ERROR);
-                }
+                .thenAccept(fileResponse -> {
+                    if (fileResponse.statusCode() == 200) {
 
-                promise.complete(null);
-            })
-            .exceptionally(ex -> {
-                promise.completeExceptionally(ex);
-                LoggingService.logData(ex.getMessage(), MessageType.ERROR);
-                return null;
+                        if (fileName.contains(".adoc")) {
+                            CompletableFuture.runAsync(() -> ExtractAdocService.unzip(filePath.toFile(), finalPath.toFile()));
+                        }
+
+                        promise.complete(null);
+
+                    } else {
+                        promise.completeExceptionally(
+                                new RuntimeException("File download failed: " + fileResponse.statusCode())
+                        );
+                    }
+                })
+                .exceptionally(ex -> {
+                    promise.completeExceptionally(ex);
+                    LoggingService.logData(ex.getMessage(), MessageType.ERROR);
+                    return null;
             });
 
         return promise;

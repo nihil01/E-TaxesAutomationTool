@@ -1,5 +1,7 @@
 package com.bizcon.taxesautomator.utils;
 
+import com.bizcon.taxesautomator.services.LoggingService;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,18 +31,21 @@ public interface ApiUtils {
     default Path createUploadDir(String path, String searchElement) {
 
         Path dirPath = Paths.get(path, searchElement);
+        LoggingService.logData("Trying to combine %s with %s".formatted(path, searchElement), MessageType.INFO);
 
         if (Files.exists(dirPath) && Files.isDirectory(dirPath)) {
             return dirPath;
+
         }else{
 
             try {
-                Files.createDirectory(dirPath);
+                Files.createDirectories(dirPath);
                 return dirPath;
 
             } catch (IOException e) {
                 System.out.println(e.getMessage());
                 return null;
+
             }
 
         }
