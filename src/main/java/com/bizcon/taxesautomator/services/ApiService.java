@@ -579,13 +579,13 @@ public class ApiService implements ApiUtils {
 
                         for (DocumentModel.Document doc : list) {
                             chain = chain.thenCompose(curCookie ->
-                                    getFileInsideMessageAsync(
-                                            doc.getId(),
-                                            doc.getCreatedAt(),
-                                            jwtToken,
-                                            searchElement,
-                                            msg
-                                    )
+                                getFileInsideMessageAsync(
+                                    doc.getId(),
+                                    doc.getCreatedAt(),
+                                    jwtToken,
+                                    searchElement,
+                                    msg
+                                )
                             );
                         }
 
@@ -612,17 +612,11 @@ public class ApiService implements ApiUtils {
         return getExtraDocuments(token, endpoint, msg, dateStart, dateEnd, unread, offset)
             .thenCompose(extra -> {
 
-                if (extra == null || extra.isEmpty()) {
+                if (extra == null || extra.length == 0) {
                     return CompletableFuture.completedFuture(acc);
                 }
 
-                Map.Entry<String, DocumentModel.Document[]> entry =
-                        extra.entrySet().iterator().next();
-
-                String nextCookie = entry.getKey();
-                DocumentModel.Document[] docs = entry.getValue();
-
-                acc.addAll(List.of(docs));
+                acc.addAll(List.of(extra));
 
                 return fetchAllDocuments(
                     token,
@@ -638,7 +632,7 @@ public class ApiService implements ApiUtils {
     }
 
 
-    private CompletableFuture<Map<String, DocumentModel.Document[]>> getExtraDocuments(String token,
+    private CompletableFuture<DocumentModel.Document[]> getExtraDocuments(String token,
                                                                            String endpoint, MessageType msg,
                                                                            String dateStart, String dateEnd,
                                                                            boolean unread, int count){
@@ -709,15 +703,10 @@ public class ApiService implements ApiUtils {
             .thenCompose(response -> {
 
             DocumentModel dm = response.body();
-            String nextCookie = response.headers().firstValue("Set-Cookie")
-                    .filter(s -> s.contains("JSESSIONID"))
-                    .map(s -> s.split(";")[0])
-                    .orElse("");
 
             if (dm != null && !dm.getMessages().isEmpty()){
 
-                return CompletableFuture.completedFuture(Map.of(nextCookie, dm.getMessages()
-                        .toArray(DocumentModel.Document[]::new)));
+                return CompletableFuture.completedFuture(dm.getMessages().toArray(DocumentModel.Document[]::new));
 
             }
 
@@ -732,12 +721,12 @@ public class ApiService implements ApiUtils {
             String inboxID, String inboxCreatedAt, String jwtToken, String searchElement, MessageType msg) {
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/edi/public/v1/message/%s?sourceSystem=avis".formatted(inboxID)))
-                .GET()
-                .timeout(Duration.ofSeconds(15))
-                .header("x-authorization", "Bearer " + jwtToken)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
-                .build();
+            .uri(URI.create(BASE_URL + "/edi/public/v1/message/%s?sourceSystem=avis".formatted(inboxID)))
+            .GET()
+            .timeout(Duration.ofSeconds(15))
+            .header("x-authorization", "Bearer " + jwtToken)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
+            .build();
 
         CompletableFuture<Boolean> promise = new CompletableFuture<>();
 
@@ -759,6 +748,7 @@ public class ApiService implements ApiUtils {
                 LoggingService.logData("File timestamp " + fileTimestamp, MessageType.INFO);
 
                 String filePart = dto.getSubject() != null ? dto.getSubject() : dto.getContent();
+                filePart = sanitizeForWindows(filePart);
 
                 LoggingService.logData("File Part " + filePart, MessageType.INFO);
 
@@ -768,15 +758,22 @@ public class ApiService implements ApiUtils {
                 if (dto.getFiles() != null && !dto.getFiles().isEmpty()) {
 
                     for (MessageDto.FileDto file: dto.getFiles()) {
-                        String ext = file.getName().substring(file.getName().lastIndexOf(".") + 1);
+
+                        String originalName = file.getName();
+                        String ext = "";
+
+                        int dotIndex = originalName.lastIndexOf(".");
+                        if (dotIndex > 0 && dotIndex < originalName.length() - 1) {
+                            ext = originalName.substring(dotIndex + 1);
+                        }
+
                         String rawName = (dto.getFiles().size() == 1)
-                                ? (filePart + "." + ext)
-                                : (filePart + UUID.randomUUID() + "." + ext);
+                            ? (filePart + "." + ext)
+                            : (filePart + UUID.randomUUID() + "." + ext);
 
                         String fileName = fileTimestamp + "_" + sanitizeForWindows(rawName);
 
                         LoggingService.logData("Full fileName is " + fileName, MessageType.INFO);
-
                         fileTasks.add(downloadAndSaveDocumentAsync(file.getId(), fileName,
                                 jwtToken, searchElement, msg, filePart));
                     }
@@ -867,6 +864,10 @@ public class ApiService implements ApiUtils {
         LoggingService.logData("Document ID " + documentID, MessageType.INFO);
         String savePath = prefs.get("folderSavePath", null);
 
+        searchElement = sanitizeForWindows(searchElement);
+        dirName = sanitizeForWindows(dirName);
+        fileName = sanitizeForWindows(fileName);
+
         if (savePath == null){
             promise.completeExceptionally(new IllegalStateException("Upload path is null"));
             return promise;
@@ -888,22 +889,24 @@ public class ApiService implements ApiUtils {
         LoggingService.logData(String.valueOf(filePath), MessageType.INFO);
 
         HttpRequest fileReq = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/filestorage/public/v1/download/%s?type=avis".formatted(documentID)))
-                .header("x-authorization", "Bearer " + jwtToken)
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Encoding", "gzip, deflate, br")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
-                .header("Referer", "https://new.e-taxes.gov.az/eportal/messages/view/" + documentID)
-                .GET()
-                .build();
+            .uri(URI.create(BASE_URL + "/filestorage/public/v1/download/%s?type=avis".formatted(documentID)))
+            .header("x-authorization", "Bearer " + jwtToken)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Encoding", "gzip, deflate, br")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
+            .header("Referer", "https://new.e-taxes.gov.az/eportal/messages/view/" + documentID)
+            .GET()
+            .build();
 
+        String finalFileName = fileName;
         client.sendAsync(fileReq, HttpResponse.BodyHandlers.ofFile(
                     filePath, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
                 )
                 .thenAccept(fileResponse -> {
+
                     if (fileResponse.statusCode() == 200) {
 
-                        if (fileName.contains(".adoc")) {
+                        if (finalFileName.contains(".adoc")) {
                             CompletableFuture.runAsync(() -> ExtractAdocService.unzip(filePath.toFile(), finalPath.toFile()));
                         }
 
@@ -913,7 +916,9 @@ public class ApiService implements ApiUtils {
                         promise.completeExceptionally(
                                 new RuntimeException("File download failed: " + fileResponse.statusCode())
                         );
+
                     }
+
                 })
                 .exceptionally(ex -> {
                     promise.completeExceptionally(ex);
